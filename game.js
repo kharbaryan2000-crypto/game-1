@@ -1,1424 +1,1161 @@
-// =============================================
-//  HOLOBOX AQUA STRIKE — MAIN GAME ENGINE
-//  All 6 Phases: 3D Pool, Water, Throw, Targets,
-//  UI, Sound & Particles
-// =============================================
+// ═══════════════════════════════════════════════════
+//  HOLOBOX AQUA ARENA — FULL GAME ENGINE
+//  Realistic 3D Pool for HoloBox Technology
+//  6 Phases: Scene, Water, Throw, Targets, UI, FX
+// ═══════════════════════════════════════════════════
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-// ─── CONSTANTS ───────────────────────────────────
-const COLORS = {
-    cyan: 0x00ffff,
-    magenta: 0xff00ff,
-    blue: 0x0066ff,
-    green: 0x00ff88,
-    orange: 0xff6622,
-    yellow: 0xffee00,
-    white: 0xffffff,
-    water: 0x005577,
-    waterDeep: 0x002244,
+// ─── PALETTE ────────────────────────────────────
+const C = {
+    cyan:     0x00ffff,
+    magenta:  0xff00ff,
+    blue:     0x4488ff,
+    green:    0x00ff88,
+    orange:   0xff8800,
+    red:      0xff2244,
+    yellow:   0xffee00,
+    gold:     0xffcc00,
+    poolTile: 0x0a3355,
+    poolWall: 0x062040,
+    waterTop: 0x00bbee,
+    waterBot: 0x003366,
+    white:    0xffffff,
 };
 
-const BOX_SIZE = { w: 12, h: 8, d: 8 };
-const POOL_DEPTH = 1.5;
-const GRAVITY = -15;
-const MAX_TARGETS = 6;
-const GAME_TIME = 90;
+// ─── CONFIG ─────────────────────────────────────
+const POOL = { w: 10, d: 7, depth: 2.2, wallThick: 0.25 };
+const GRAVITY   = -14;
+const MAX_TGTS  = 7;
+const GAME_SEC  = 90;
 const MAX_LIVES = 5;
+const COMBO_MS  = 3500;
 
-// ─── GAME STATE ──────────────────────────────────
-const state = {
-    running: false,
-    score: 0,
-    combo: 1,
-    maxCombo: 1,
-    lives: MAX_LIVES,
-    timer: GAME_TIME,
-    wave: 1,
-    totalHits: 0,
-    totalThrows: 0,
-    selectedObject: 'ball',
-    isCharging: false,
-    chargeStart: 0,
-    chargePower: 0,
-    mouseNDC: new THREE.Vector2(),
-    mouseScreen: { x: 0, y: 0 },
-    throwables: [],
+// ─── STATE ──────────────────────────────────────
+const S = {
+    on: false,
+    score: 0, combo: 1, maxCombo: 1,
+    lives: MAX_LIVES, timer: GAME_SEC, wave: 1,
+    hits: 0, throws: 0,
+    objType: 'ball',
+    charging: false, chargeT0: 0, power: 0,
+    mouse: new THREE.Vector2(),
+    mouseXY: { x: 0, y: 0 },
+    projectiles: [],
     targets: [],
     particles: [],
-    splashParticles: [],
-    trailParticles: [],
-    ambientParticles: null,
-    lastComboTime: 0,
-    comboTimeout: 3000,
+    lastCombo: 0,
+    spawnCd: 0, waveCd: 0,
 };
 
-// ─── THREE.JS GLOBALS ───────────────────────────
-let scene, camera, renderer, composer, controls;
-let clock = new THREE.Clock();
-let waterMesh, waterMaterial;
-let holoBox;
-let avatarGroup;
-let raycaster = new THREE.Raycaster();
-
-// ─── SOUND CONTEXT ──────────────────────────────
+// ─── ENGINE REFS ────────────────────────────────
+let scene, cam, renderer, composer, controls, clock;
+let waterMesh, waterMat, causticPlane, causticMat;
+let avatarGrp, poolGrp;
+let ray = new THREE.Raycaster();
 let audioCtx;
+const $ = {};  // DOM cache
 
-// ─── DOM REFS ───────────────────────────────────
-const dom = {};
-
-// =============================================
-//  INITIALIZATION
-// =============================================
-function init() {
-    cacheDom();
-    setupScene();
-    createHoloBox();
-    createPool();
-    createAvatar();
-    createAmbientParticles();
-    setupPostProcessing();
-    setupEventListeners();
-    animate();
+// ═══════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════
+function boot() {
+    domCache();
+    initScene();
+    buildPool();
+    buildWater();
+    buildAvatar();
+    buildAmbientDust();
+    initPostFX();
+    bindEvents();
+    renderLives();
+    tick();
 }
 
-function cacheDom() {
-    dom.container = document.getElementById('game-container');
-    dom.startScreen = document.getElementById('start-screen');
-    dom.startBtn = document.getElementById('start-btn');
-    dom.gameOver = document.getElementById('game-over');
-    dom.restartBtn = document.getElementById('restart-btn');
-    dom.crosshair = document.getElementById('crosshair');
-    dom.scoreValue = document.getElementById('score-value');
-    dom.comboValue = document.getElementById('combo-value');
-    dom.timerValue = document.getElementById('timer-value');
-    dom.waveValue = document.getElementById('wave-value');
-    dom.livesValue = document.getElementById('lives-value');
-    dom.powerContainer = document.getElementById('power-bar-container');
-    dom.powerFill = document.getElementById('power-fill');
-    dom.hitFeedback = document.getElementById('hit-feedback');
-    dom.hitText = document.getElementById('hit-text');
-    dom.notification = document.getElementById('notification');
-    dom.objBtns = document.querySelectorAll('.obj-btn');
-    dom.hud = document.getElementById('hud');
-    dom.objectSelector = document.getElementById('object-selector');
-    dom.finalScore = document.getElementById('final-score');
-    dom.finalCombo = document.getElementById('final-combo');
-    dom.finalHits = document.getElementById('final-hits');
-    dom.finalAccuracy = document.getElementById('final-accuracy');
+function domCache() {
+    const id = s => document.getElementById(s);
+    $.container = id('game-container');
+    $.start    = id('start-screen');
+    $.startBtn = id('start-btn');
+    $.over     = id('game-over');
+    $.restartBtn= id('restart-btn');
+    $.cross    = id('crosshair');
+    $.scoreV   = id('score-value');
+    $.comboV   = id('combo-value');
+    $.timerV   = id('timer-value');
+    $.waveV    = id('wave-value');
+    $.livesV   = id('lives-value');
+    $.powerMtr = id('power-meter');
+    $.powerFill= id('power-fill');
+    $.powerPct = id('power-pct');
+    $.notif    = id('notification');
+    $.hitPop   = id('hit-popup');
+    $.objBtns  = document.querySelectorAll('.obj-btn');
+    $.hud      = id('hud');
+    $.objSel   = id('object-selector');
+    $.fScore   = id('final-score');
+    $.fHits    = id('final-hits');
+    $.fAcc     = id('final-accuracy');
+    $.fCombo   = id('final-combo');
 }
 
-// =============================================
+// ═══════════════════════════════════════════════
 //  PHASE 1 — 3D SCENE + CAMERA
-// =============================================
-function setupScene() {
+// ═══════════════════════════════════════════════
+function initScene() {
     scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x000011, 0.02);
+    // Pure black for holobox — no fog needed
+    scene.background = new THREE.Color(0x000000);
 
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
-    camera.position.set(0, 5, 14);
-    camera.lookAt(0, 0, 0);
+    cam = new THREE.PerspectiveCamera(
+        55, innerWidth / innerHeight, 0.1, 150
+    );
+    cam.position.set(0, 8, 12);
+    cam.lookAt(0, -0.5, 0);
 
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.4;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    dom.container.appendChild(renderer.domElement);
+    $.container.appendChild(renderer.domElement);
 
-    // Controls (limited orbit)
-    controls = new OrbitControls(camera, renderer.domElement);
+    // Subtle orbit for "R" key
+    controls = new OrbitControls(cam, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    controls.dampingFactor = 0.06;
     controls.enablePan = false;
-    controls.enableZoom = false;
-    controls.minPolarAngle = Math.PI * 0.2;
-    controls.maxPolarAngle = Math.PI * 0.45;
-    controls.minAzimuthAngle = -Math.PI * 0.3;
-    controls.maxAzimuthAngle = Math.PI * 0.3;
+    controls.enableZoom = true;
+    controls.minDistance = 8;
+    controls.maxDistance = 22;
+    controls.minPolarAngle = Math.PI * 0.15;
+    controls.maxPolarAngle = Math.PI * 0.48;
     controls.enabled = false;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0x112244, 0.5);
-    scene.add(ambientLight);
+    clock = new THREE.Clock();
 
-    const mainLight = new THREE.DirectionalLight(0x00aaff, 0.8);
-    mainLight.position.set(5, 10, 5);
-    mainLight.castShadow = true;
-    mainLight.shadow.mapSize.set(1024, 1024);
-    scene.add(mainLight);
+    // ── Lights ──
+    scene.add(new THREE.AmbientLight(0x0a1a30, 0.6));
 
-    const pointLight1 = new THREE.PointLight(COLORS.cyan, 1, 20);
-    pointLight1.position.set(-4, 6, 3);
-    scene.add(pointLight1);
+    const dir = new THREE.DirectionalLight(0x88ccff, 0.7);
+    dir.position.set(4, 12, 6);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1024, 1024);
+    dir.shadow.camera.near = 0.5;
+    dir.shadow.camera.far = 30;
+    dir.shadow.camera.left = -8;
+    dir.shadow.camera.right = 8;
+    dir.shadow.camera.top = 8;
+    dir.shadow.camera.bottom = -8;
+    scene.add(dir);
 
-    const pointLight2 = new THREE.PointLight(COLORS.magenta, 0.6, 20);
-    pointLight2.position.set(4, 6, -3);
-    scene.add(pointLight2);
+    // Pool underwater lights
+    const uw1 = new THREE.PointLight(C.cyan, 1.8, 12);
+    uw1.position.set(-3, -1.5, -1);
+    scene.add(uw1);
 
-    const bottomLight = new THREE.PointLight(COLORS.cyan, 0.4, 15);
-    bottomLight.position.set(0, -2, 0);
-    scene.add(bottomLight);
+    const uw2 = new THREE.PointLight(C.blue, 1.2, 12);
+    uw2.position.set(3, -1.5, 1);
+    scene.add(uw2);
+
+    const uw3 = new THREE.PointLight(C.magenta, 0.5, 10);
+    uw3.position.set(0, -0.5, -2);
+    scene.add(uw3);
+
+    // Rim lights
+    const rim1 = new THREE.PointLight(C.cyan, 0.6, 18);
+    rim1.position.set(-6, 3, 5);
+    scene.add(rim1);
+    const rim2 = new THREE.PointLight(C.magenta, 0.4, 18);
+    rim2.position.set(6, 3, -5);
+    scene.add(rim2);
 }
 
-function createHoloBox() {
-    holoBox = new THREE.Group();
+// ═══════════════════════════════════════════════
+//  PHASE 1 — POOL CONSTRUCTION
+// ═══════════════════════════════════════════════
+function buildPool() {
+    poolGrp = new THREE.Group();
 
-    // Wireframe edges of the box
-    const edgeMat = new THREE.LineBasicMaterial({
-        color: COLORS.cyan,
-        transparent: true,
-        opacity: 0.35,
+    const hw = POOL.w / 2, hd = POOL.d / 2, dep = POOL.depth, wt = POOL.wallThick;
+
+    // ── Floor Tiles ──
+    const tileMat = new THREE.MeshPhysicalMaterial({
+        color: C.poolTile,
+        roughness: 0.25,
+        metalness: 0.4,
+        emissive: C.cyan,
+        emissiveIntensity: 0.04,
     });
 
-    const hw = BOX_SIZE.w / 2, hh = BOX_SIZE.h / 2, hd = BOX_SIZE.d / 2;
-    const corners = [
-        [-hw, -hh, -hd], [hw, -hh, -hd], [hw, hh, -hd], [-hw, hh, -hd],
-        [-hw, -hh, hd], [hw, -hh, hd], [hw, hh, hd], [-hw, hh, hd],
-    ];
-    const edges = [
-        [0,1],[1,2],[2,3],[3,0],
-        [4,5],[5,6],[6,7],[7,4],
-        [0,4],[1,5],[2,6],[3,7],
-    ];
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(POOL.w, POOL.d), tileMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -dep;
+    floor.receiveShadow = true;
+    poolGrp.add(floor);
 
-    edges.forEach(([a, b]) => {
-        const geo = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(...corners[a]),
-            new THREE.Vector3(...corners[b]),
-        ]);
-        holoBox.add(new THREE.Line(geo, edgeMat));
-    });
+    // Tile grid lines on floor
+    const gridW = new THREE.GridHelper(POOL.w, 16, C.cyan, C.cyan);
+    gridW.position.y = -dep + 0.01;
+    gridW.material.transparent = true;
+    gridW.material.opacity = 0.07;
+    poolGrp.add(gridW);
 
-    // Transparent walls (faintly visible)
+    // ── Walls ──
     const wallMat = new THREE.MeshPhysicalMaterial({
-        color: COLORS.cyan,
+        color: C.poolWall,
+        roughness: 0.2,
+        metalness: 0.5,
         transparent: true,
-        opacity: 0.03,
+        opacity: 0.7,
+        emissive: C.cyan,
+        emissiveIntensity: 0.03,
         side: THREE.DoubleSide,
-        roughness: 0.1,
-        metalness: 0.2,
-        envMapIntensity: 0.5,
     });
 
     // Back wall
-    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(BOX_SIZE.w, BOX_SIZE.h), wallMat);
-    backWall.position.z = -hd;
-    holoBox.add(backWall);
+    const bw = new THREE.Mesh(new THREE.PlaneGeometry(POOL.w, dep), wallMat);
+    bw.position.set(0, -dep / 2, -hd);
+    poolGrp.add(bw);
+    // Front wall
+    const fw = new THREE.Mesh(new THREE.PlaneGeometry(POOL.w, dep), wallMat);
+    fw.position.set(0, -dep / 2, hd);
+    fw.rotation.y = Math.PI;
+    poolGrp.add(fw);
+    // Left wall
+    const lw = new THREE.Mesh(new THREE.PlaneGeometry(POOL.d, dep), wallMat);
+    lw.position.set(-hw, -dep / 2, 0);
+    lw.rotation.y = Math.PI / 2;
+    poolGrp.add(lw);
+    // Right wall
+    const rw = new THREE.Mesh(new THREE.PlaneGeometry(POOL.d, dep), wallMat);
+    rw.position.set(hw, -dep / 2, 0);
+    rw.rotation.y = -Math.PI / 2;
+    poolGrp.add(rw);
 
-    // Side walls
-    const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(BOX_SIZE.d, BOX_SIZE.h), wallMat);
-    leftWall.rotation.y = Math.PI / 2;
-    leftWall.position.x = -hw;
-    holoBox.add(leftWall);
+    // ── Pool Rim / Ledge ──
+    const rimMat = new THREE.MeshPhysicalMaterial({
+        color: 0x112244,
+        roughness: 0.1,
+        metalness: 0.85,
+        emissive: C.cyan,
+        emissiveIntensity: 0.08,
+    });
 
-    const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(BOX_SIZE.d, BOX_SIZE.h), wallMat);
-    rightWall.rotation.y = -Math.PI / 2;
-    rightWall.position.x = hw;
-    holoBox.add(rightWall);
+    // Rim pieces (top edge of pool)
+    const rimH = 0.12, rimW = 0.35;
+    // Back rim
+    const br = new THREE.Mesh(new THREE.BoxGeometry(POOL.w + rimW * 2, rimH, rimW), rimMat);
+    br.position.set(0, rimH / 2, -hd - rimW / 2);
+    br.castShadow = true;
+    poolGrp.add(br);
+    // Front rim
+    const fr = new THREE.Mesh(new THREE.BoxGeometry(POOL.w + rimW * 2, rimH, rimW), rimMat);
+    fr.position.set(0, rimH / 2, hd + rimW / 2);
+    fr.castShadow = true;
+    poolGrp.add(fr);
+    // Left rim
+    const lr = new THREE.Mesh(new THREE.BoxGeometry(rimW, rimH, POOL.d), rimMat);
+    lr.position.set(-hw - rimW / 2, rimH / 2, 0);
+    lr.castShadow = true;
+    poolGrp.add(lr);
+    // Right rim
+    const rr = new THREE.Mesh(new THREE.BoxGeometry(rimW, rimH, POOL.d), rimMat);
+    rr.position.set(hw + rimW / 2, rimH / 2, 0);
+    rr.castShadow = true;
+    poolGrp.add(rr);
 
-    // Floor
-    const floorMat = new THREE.MeshPhysicalMaterial({
-        color: 0x001122,
-        transparent: true,
-        opacity: 0.3,
+    // ── Rim Glow Strips (LED-like) ──
+    const stripMat = new THREE.MeshBasicMaterial({
+        color: C.cyan, transparent: true, opacity: 0.25,
+    });
+    [
+        [0, 0.02, -hd - 0.02, POOL.w + 0.5, 0.04, 0.04, 0],
+        [0, 0.02, hd + 0.02, POOL.w + 0.5, 0.04, 0.04, 0],
+        [-hw - 0.02, 0.02, 0, 0.04, 0.04, POOL.d, 0],
+        [hw + 0.02, 0.02, 0, 0.04, 0.04, POOL.d, 0],
+    ].forEach(([x, y, z, w, h, d]) => {
+        const s = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), stripMat);
+        s.position.set(x, y, z);
+        poolGrp.add(s);
+    });
+
+    // ── Corner Pillars ──
+    const pillarMat = new THREE.MeshPhysicalMaterial({
+        color: 0x0a1a33,
+        emissive: C.cyan,
+        emissiveIntensity: 0.12,
         roughness: 0.05,
-        metalness: 0.8,
+        metalness: 0.9,
     });
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(BOX_SIZE.w, BOX_SIZE.d), floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = -hh;
-    floor.receiveShadow = true;
-    holoBox.add(floor);
+    const pillarH = 3;
+    [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(([sx, sz]) => {
+        const pil = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.12, 0.12, pillarH, 8),
+            pillarMat
+        );
+        pil.position.set(sx * (hw + 0.3), pillarH / 2 - 0.1, sz * (hd + 0.3));
+        pil.castShadow = true;
+        poolGrp.add(pil);
 
-    // Grid on floor
-    const gridHelper = new THREE.GridHelper(Math.max(BOX_SIZE.w, BOX_SIZE.d), 20, COLORS.cyan, COLORS.cyan);
-    gridHelper.position.y = -hh + 0.01;
-    gridHelper.material.transparent = true;
-    gridHelper.material.opacity = 0.06;
-    holoBox.add(gridHelper);
-
-    // Corner glow orbs
-    [[-1,-1,-1],[1,-1,-1],[-1,-1,1],[1,-1,1],[-1,1,-1],[1,1,-1],[-1,1,1],[1,1,1]].forEach(([x,y,z]) => {
+        // Top orb
         const orb = new THREE.Mesh(
-            new THREE.SphereGeometry(0.08, 8, 8),
-            new THREE.MeshBasicMaterial({ color: COLORS.cyan })
+            new THREE.SphereGeometry(0.14, 12, 12),
+            new THREE.MeshBasicMaterial({ color: C.cyan })
         );
-        orb.position.set(x * hw, y * hh, z * hd);
-        holoBox.add(orb);
+        orb.position.set(sx * (hw + 0.3), pillarH - 0.1, sz * (hd + 0.3));
+        poolGrp.add(orb);
 
-        const glowOrb = new THREE.Mesh(
-            new THREE.SphereGeometry(0.2, 8, 8),
-            new THREE.MeshBasicMaterial({ color: COLORS.cyan, transparent: true, opacity: 0.15 })
+        // Orb glow
+        const og = new THREE.Mesh(
+            new THREE.SphereGeometry(0.3, 8, 8),
+            new THREE.MeshBasicMaterial({ color: C.cyan, transparent: true, opacity: 0.1 })
         );
-        glowOrb.position.copy(orb.position);
-        holoBox.add(glowOrb);
+        og.position.copy(orb.position);
+        poolGrp.add(og);
     });
 
-    scene.add(holoBox);
+    scene.add(poolGrp);
 }
 
-// =============================================
-//  PHASE 2 — WATER ANIMATION + HOLOGRAPHIC
-// =============================================
-function createPool() {
-    const poolW = BOX_SIZE.w * 0.75;
-    const poolD = BOX_SIZE.d * 0.75;
+// ═══════════════════════════════════════════════
+//  PHASE 2 — WATER + HOLOGRAPHIC EFFECT
+// ═══════════════════════════════════════════════
+function buildWater() {
+    const geo = new THREE.PlaneGeometry(POOL.w - 0.1, POOL.d - 0.1, 80, 60);
 
-    // Pool basin (hollow)
-    const basinGeo = new THREE.BoxGeometry(poolW, POOL_DEPTH, poolD);
-    const basinMat = new THREE.MeshPhysicalMaterial({
-        color: 0x001133,
-        transparent: true,
-        opacity: 0.5,
-        side: THREE.BackSide,
-        roughness: 0.1,
-        metalness: 0.8,
-    });
-    const basin = new THREE.Mesh(basinGeo, basinMat);
-    basin.position.y = -BOX_SIZE.h / 2 + POOL_DEPTH / 2;
-    scene.add(basin);
-
-    // Pool rim
-    const rimGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(poolW + 0.1, POOL_DEPTH + 0.1, poolD + 0.1));
-    const rimMat = new THREE.LineBasicMaterial({ color: COLORS.cyan, transparent: true, opacity: 0.4 });
-    const rim = new THREE.LineSegments(rimGeo, rimMat);
-    rim.position.copy(basin.position);
-    scene.add(rim);
-
-    // Water surface with custom shader
-    const waterGeo = new THREE.PlaneGeometry(poolW, poolD, 64, 64);
-    waterMaterial = new THREE.ShaderMaterial({
+    waterMat = new THREE.ShaderMaterial({
         uniforms: {
-            uTime: { value: 0 },
-            uColor1: { value: new THREE.Color(0x00ddff) },
-            uColor2: { value: new THREE.Color(0x0044aa) },
-            uColor3: { value: new THREE.Color(0xff00ff) },
-            uOpacity: { value: 0.65 },
+            uTime:    { value: 0 },
+            uCol1:    { value: new THREE.Color(0x00ccff) },
+            uCol2:    { value: new THREE.Color(0x0055aa) },
+            uColH:    { value: new THREE.Color(0xff00ff) },
+            uOpacity: { value: 0.58 },
         },
-        vertexShader: `
+        vertexShader: /* glsl */`
             uniform float uTime;
             varying vec2 vUv;
-            varying float vWave;
-
-            void main() {
+            varying float vH;
+            void main(){
                 vUv = uv;
-                vec3 pos = position;
-
-                float wave1 = sin(pos.x * 3.0 + uTime * 2.0) * 0.08;
-                float wave2 = sin(pos.y * 4.0 + uTime * 1.5) * 0.06;
-                float wave3 = cos(pos.x * 2.0 + pos.y * 2.5 + uTime * 1.8) * 0.05;
-                float wave4 = sin(length(pos.xy) * 5.0 - uTime * 3.0) * 0.03;
-
-                pos.z += wave1 + wave2 + wave3 + wave4;
-                vWave = wave1 + wave2 + wave3 + wave4;
-
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                vec3 p = position;
+                float w1 = sin(p.x*2.5 + uTime*1.8)*0.09;
+                float w2 = cos(p.y*3.0 + uTime*1.3)*0.07;
+                float w3 = sin((p.x+p.y)*2.0 + uTime*2.2)*0.05;
+                float w4 = sin(length(p.xy)*4.0 - uTime*2.5)*0.04;
+                float w5 = cos(p.x*5.0 - uTime*3.0)*sin(p.y*4.0 + uTime*1.6)*0.03;
+                p.z += w1+w2+w3+w4+w5;
+                vH = p.z;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(p,1.0);
             }
         `,
-        fragmentShader: `
+        fragmentShader: /* glsl */`
             uniform float uTime;
-            uniform vec3 uColor1;
-            uniform vec3 uColor2;
-            uniform vec3 uColor3;
+            uniform vec3 uCol1, uCol2, uColH;
             uniform float uOpacity;
             varying vec2 vUv;
-            varying float vWave;
+            varying float vH;
+            void main(){
+                // base gradient
+                float t = sin(uTime*0.4 + vUv.x*3.0)*0.5+0.5;
+                vec3 col = mix(uCol1, uCol2, t);
 
-            void main() {
-                // Animated color blend
-                float t = sin(uTime * 0.5 + vUv.x * 3.0) * 0.5 + 0.5;
-                vec3 color = mix(uColor1, uColor2, t);
+                // holographic shimmer bands
+                float band = sin(vUv.x*50.0 + uTime*4.0)*sin(vUv.y*50.0 - uTime*2.5);
+                col += uColH * band * 0.07;
 
-                // Holographic shimmer
-                float shimmer = sin(vUv.x * 40.0 + uTime * 5.0) * sin(vUv.y * 40.0 - uTime * 3.0);
-                color += uColor3 * shimmer * 0.08;
+                // caustic pattern
+                float c1 = sin(vUv.x*25.0 + uTime*1.8)*sin(vUv.y*22.0 + uTime*1.4);
+                float c2 = cos(vUv.x*18.0 - uTime*2.1)*cos(vUv.y*20.0 + uTime*1.1);
+                float caustic = max(c1,0.0)*0.12 + max(c2,0.0)*0.08;
+                col += vec3(caustic*0.4, caustic*0.8, caustic);
 
-                // Bright on wave peaks
-                float brightness = vWave * 4.0 + 0.5;
-                color *= brightness;
+                // wave peak brightness
+                col *= 0.7 + vH*3.5;
 
-                // Edge glow
-                float edgeDist = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
-                float edgeGlow = smoothstep(0.0, 0.15, edgeDist);
-                color = mix(uColor1 * 1.5, color, edgeGlow);
+                // edge glow
+                float edge = min(min(vUv.x, 1.0-vUv.x), min(vUv.y, 1.0-vUv.y));
+                float eg = smoothstep(0.0, 0.1, edge);
+                col = mix(uCol1*1.8, col, eg);
 
-                // Caustic-like pattern
-                float caustic = sin(vUv.x * 20.0 + uTime * 2.0) * sin(vUv.y * 20.0 + uTime * 1.7);
-                color += vec3(0.0, caustic * 0.06, caustic * 0.08);
+                // subtle scanline
+                float scan = 0.96 + 0.04*sin(vUv.y*200.0 + uTime*6.0);
+                col *= scan;
 
-                gl_FragColor = vec4(color, uOpacity);
+                gl_FragColor = vec4(col, uOpacity);
             }
         `,
         transparent: true,
         side: THREE.DoubleSide,
+        depthWrite: false,
     });
 
-    waterMesh = new THREE.Mesh(waterGeo, waterMaterial);
+    waterMesh = new THREE.Mesh(geo, waterMat);
     waterMesh.rotation.x = -Math.PI / 2;
-    waterMesh.position.y = -BOX_SIZE.h / 2 + POOL_DEPTH;
+    waterMesh.position.y = 0; // water surface at y=0
     scene.add(waterMesh);
+
+    // ── Caustic light projection on pool floor ──
+    const causGeo = new THREE.PlaneGeometry(POOL.w - 0.3, POOL.d - 0.3, 1, 1);
+    causticMat = new THREE.ShaderMaterial({
+        uniforms: {
+            uTime: { value: 0 },
+        },
+        vertexShader: /* glsl */`
+            varying vec2 vUv;
+            void main(){
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+            }
+        `,
+        fragmentShader: /* glsl */`
+            uniform float uTime;
+            varying vec2 vUv;
+            void main(){
+                float c1 = sin(vUv.x*16.0+uTime*1.5)*sin(vUv.y*14.0+uTime*1.1);
+                float c2 = cos(vUv.x*12.0-uTime*1.8)*cos(vUv.y*15.0+uTime*0.9);
+                float c3 = sin((vUv.x+vUv.y)*10.0+uTime*2.0);
+                float c = max(c1,0.0)*0.5 + max(c2,0.0)*0.3 + max(c3,0.0)*0.2;
+                vec3 col = vec3(c*0.15, c*0.5, c*0.7);
+                gl_FragColor = vec4(col, c*0.35);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+    });
+    causticPlane = new THREE.Mesh(causGeo, causticMat);
+    causticPlane.rotation.x = -Math.PI / 2;
+    causticPlane.position.y = -POOL.depth + 0.02;
+    scene.add(causticPlane);
 }
 
-function createAvatar() {
-    avatarGroup = new THREE.Group();
+// ═══════════════════════════════════════════════
+//  AVATAR (Holographic Figure at Pool Edge)
+// ═══════════════════════════════════════════════
+function buildAvatar() {
+    avatarGrp = new THREE.Group();
 
-    // Body
-    const bodyGeo = new THREE.CylinderGeometry(0.25, 0.3, 0.9, 8);
-    const bodyMat = new THREE.MeshPhysicalMaterial({
-        color: COLORS.cyan,
-        transparent: true,
-        opacity: 0.7,
-        emissive: COLORS.cyan,
-        emissiveIntensity: 0.3,
-        roughness: 0.2,
-        metalness: 0.6,
+    const glowMat = (col, emI = 0.35, op = 0.8) => new THREE.MeshPhysicalMaterial({
+        color: col, emissive: col, emissiveIntensity: emI,
+        transparent: true, opacity: op,
+        roughness: 0.15, metalness: 0.6,
     });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.45;
-    avatarGroup.add(body);
+
+    // Torso
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.8, 8), glowMat(C.cyan));
+    torso.position.y = 0.4;
+    avatarGrp.add(torso);
 
     // Head
-    const headGeo = new THREE.SphereGeometry(0.22, 12, 12);
-    const headMat = new THREE.MeshPhysicalMaterial({
-        color: COLORS.cyan,
-        transparent: true,
-        opacity: 0.8,
-        emissive: COLORS.cyan,
-        emissiveIntensity: 0.4,
-        roughness: 0.1,
-        metalness: 0.5,
-    });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 1.1;
-    avatarGroup.add(head);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 14), glowMat(C.cyan, 0.45, 0.85));
+    head.position.y = 1.0;
+    avatarGrp.add(head);
 
     // Visor
-    const visorGeo = new THREE.SphereGeometry(0.15, 8, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
-    const visorMat = new THREE.MeshBasicMaterial({
-        color: COLORS.magenta,
-        transparent: true,
-        opacity: 0.5,
-    });
-    const visor = new THREE.Mesh(visorGeo, visorMat);
-    visor.position.set(0, 1.15, 0.12);
-    visor.rotation.x = -Math.PI * 0.15;
-    avatarGroup.add(visor);
+    const visor = new THREE.Mesh(
+        new THREE.SphereGeometry(0.13, 10, 5, 0, Math.PI * 2, 0, Math.PI * 0.5),
+        new THREE.MeshBasicMaterial({ color: C.magenta, transparent: true, opacity: 0.55 })
+    );
+    visor.position.set(0, 1.05, 0.1);
+    visor.rotation.x = -0.2;
+    avatarGrp.add(visor);
 
     // Arms
-    const armGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.6, 6);
-    const armMat = bodyMat.clone();
-
-    const leftArm = new THREE.Mesh(armGeo, armMat);
-    leftArm.position.set(-0.35, 0.6, 0);
-    leftArm.rotation.z = 0.3;
-    avatarGroup.add(leftArm);
-
-    const rightArm = new THREE.Mesh(armGeo, armMat);
-    rightArm.position.set(0.35, 0.6, 0);
-    rightArm.rotation.z = -0.3;
-    rightArm.name = 'rightArm';
-    avatarGroup.add(rightArm);
+    const armGeo = new THREE.CapsuleGeometry(0.05, 0.45, 4, 6);
+    const la = new THREE.Mesh(armGeo, glowMat(C.cyan, 0.3, 0.7));
+    la.position.set(-0.32, 0.55, 0); la.rotation.z = 0.35;
+    avatarGrp.add(la);
+    const ra = new THREE.Mesh(armGeo, glowMat(C.cyan, 0.3, 0.7));
+    ra.position.set(0.32, 0.55, 0); ra.rotation.z = -0.35;
+    ra.name = 'rArm';
+    avatarGrp.add(ra);
 
     // Legs
-    const legGeo = new THREE.CylinderGeometry(0.07, 0.09, 0.5, 6);
-    const leftLeg = new THREE.Mesh(legGeo, armMat);
-    leftLeg.position.set(-0.12, -0.05, 0);
-    avatarGroup.add(leftLeg);
+    const legGeo = new THREE.CapsuleGeometry(0.06, 0.4, 4, 6);
+    const ll = new THREE.Mesh(legGeo, glowMat(C.cyan, 0.25, 0.65));
+    ll.position.set(-0.1, -0.1, 0);
+    avatarGrp.add(ll);
+    const rl = new THREE.Mesh(legGeo, glowMat(C.cyan, 0.25, 0.65));
+    rl.position.set(0.1, -0.1, 0);
+    avatarGrp.add(rl);
 
-    const rightLeg = new THREE.Mesh(legGeo, armMat);
-    rightLeg.position.set(0.12, -0.05, 0);
-    avatarGroup.add(rightLeg);
+    // Base ring
+    const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.4, 0.02, 6, 32),
+        new THREE.MeshBasicMaterial({ color: C.cyan, transparent: true, opacity: 0.25 })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = -0.25;
+    ring.name = 'baseRing';
+    avatarGrp.add(ring);
 
-    // Glow ring around avatar
-    const glowRingGeo = new THREE.TorusGeometry(0.5, 0.02, 8, 32);
-    const glowRingMat = new THREE.MeshBasicMaterial({
-        color: COLORS.cyan,
-        transparent: true,
-        opacity: 0.3,
-    });
-    const glowRing = new THREE.Mesh(glowRingGeo, glowRingMat);
-    glowRing.rotation.x = Math.PI / 2;
-    glowRing.position.y = -0.2;
-    glowRing.name = 'glowRing';
-    avatarGroup.add(glowRing);
-
-    avatarGroup.position.set(0, -BOX_SIZE.h / 2 + POOL_DEPTH + 0.3, BOX_SIZE.d / 2 - 1.2);
-    scene.add(avatarGroup);
+    avatarGrp.position.set(0, 0.35, POOL.d / 2 + 1);
+    scene.add(avatarGrp);
 }
 
-// =============================================
+// ── Ambient floating dust/particles ──
+let ambientPts;
+function buildAmbientDust() {
+    const N = 300;
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+        pos[i * 3]     = (Math.random() - 0.5) * 16;
+        pos[i * 3 + 1] = Math.random() * 8 - 2;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * 14;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+        color: C.cyan, size: 0.035,
+        transparent: true, opacity: 0.25,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+    });
+    ambientPts = new THREE.Points(geo, mat);
+    scene.add(ambientPts);
+}
+
+// ═══════════════════════════════════════════════
 //  PHASE 3 — THROWABLE OBJECTS
-// =============================================
-function createThrowable(type, position, velocity) {
+// ═══════════════════════════════════════════════
+function makeProjectile(type, pos, vel) {
     let mesh;
-    const glowColor = type === 'ball' ? COLORS.cyan : type === 'ring' ? COLORS.magenta : COLORS.green;
+    const gc = type === 'ball' ? C.cyan : type === 'ring' ? C.magenta : C.green;
+
+    const gm = (c) => new THREE.MeshPhysicalMaterial({
+        color: c, emissive: c, emissiveIntensity: 0.55,
+        transparent: true, opacity: 0.88,
+        roughness: 0.08, metalness: 0.7,
+    });
 
     if (type === 'ball') {
-        const geo = new THREE.SphereGeometry(0.2, 16, 16);
-        const mat = new THREE.MeshPhysicalMaterial({
-            color: glowColor,
-            emissive: glowColor,
-            emissiveIntensity: 0.5,
-            transparent: true,
-            opacity: 0.85,
-            roughness: 0.1,
-            metalness: 0.7,
-        });
-        mesh = new THREE.Mesh(geo, mat);
-
-        // Inner glow
-        const innerGeo = new THREE.SphereGeometry(0.25, 8, 8);
-        const innerMat = new THREE.MeshBasicMaterial({
-            color: glowColor,
-            transparent: true,
-            opacity: 0.15,
-        });
-        mesh.add(new THREE.Mesh(innerGeo, innerMat));
-
+        mesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), gm(gc));
+        // inner glow
+        mesh.add(new THREE.Mesh(
+            new THREE.SphereGeometry(0.24, 8, 8),
+            new THREE.MeshBasicMaterial({ color: gc, transparent: true, opacity: 0.12 })
+        ));
     } else if (type === 'ring') {
-        const geo = new THREE.TorusGeometry(0.22, 0.05, 8, 24);
-        const mat = new THREE.MeshPhysicalMaterial({
-            color: glowColor,
-            emissive: glowColor,
-            emissiveIntensity: 0.5,
-            transparent: true,
-            opacity: 0.85,
-            roughness: 0.1,
-            metalness: 0.8,
-        });
-        mesh = new THREE.Mesh(geo, mat);
-
-    } else { // diver
+        mesh = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 24), gm(gc));
+    } else {
         mesh = new THREE.Group();
-        // Diver body
-        const diverBody = new THREE.Mesh(
-            new THREE.CapsuleGeometry(0.08, 0.3, 4, 8),
-            new THREE.MeshPhysicalMaterial({
-                color: glowColor,
-                emissive: glowColor,
-                emissiveIntensity: 0.5,
-                transparent: true,
-                opacity: 0.85,
-            })
+        mesh.add(new THREE.Mesh(
+            new THREE.CapsuleGeometry(0.06, 0.28, 4, 8), gm(gc)
+        ));
+        const tip = new THREE.Mesh(
+            new THREE.ConeGeometry(0.06, 0.12, 6),
+            new THREE.MeshBasicMaterial({ color: gc, transparent: true, opacity: 0.8 })
         );
-        mesh.add(diverBody);
-
-        // Diver head
-        const diverHead = new THREE.Mesh(
-            new THREE.SphereGeometry(0.08, 8, 8),
-            new THREE.MeshBasicMaterial({ color: glowColor, transparent: true, opacity: 0.8 })
-        );
-        diverHead.position.y = 0.25;
-        mesh.add(diverHead);
+        tip.position.y = 0.22;
+        mesh.add(tip);
     }
 
-    mesh.position.copy(position);
+    mesh.position.copy(pos);
     mesh.castShadow = true;
     scene.add(mesh);
 
-    const throwable = {
-        mesh,
-        type,
-        velocity: velocity.clone(),
-        alive: true,
-        age: 0,
-        inWater: false,
-        trail: [],
-    };
-
-    state.throwables.push(throwable);
-    return throwable;
+    S.projectiles.push({
+        mesh, type, vel: vel.clone(),
+        alive: true, age: 0, wet: false, trailT: 0,
+    });
 }
 
-function throwObject() {
-    const power = state.chargePower;
-    if (power < 0.05) return;
+function doThrow() {
+    if (S.power < 0.04) return;
+    S.throws++;
 
-    state.totalThrows++;
+    ray.setFromCamera(S.mouse, cam);
+    const dir = ray.ray.direction.clone();
 
-    // Calculate throw direction from avatar toward the mouse aim
-    const aimDir = new THREE.Vector3();
-    raycaster.setFromCamera(state.mouseNDC, camera);
-    aimDir.copy(raycaster.ray.direction);
+    const origin = avatarGrp.position.clone();
+    origin.y += 0.9;
 
-    // Starting position from avatar's right arm
-    const startPos = avatarGroup.position.clone();
-    startPos.y += 1.0;
+    const speed = 7 + S.power * 20;
+    const vel = dir.normalize().multiplyScalar(speed);
+    vel.y += 2.5 + S.power * 3.5;
 
-    // Velocity based on power and aim
-    const speed = 8 + power * 18;
-    const velocity = aimDir.normalize().multiplyScalar(speed);
+    makeProjectile(S.objType, origin, vel);
 
-    // Add slight upward arc
-    velocity.y += 3 + power * 3;
-
-    createThrowable(state.selectedObject, startPos, velocity);
-
-    // Avatar throw animation
-    const rightArm = avatarGroup.getObjectByName('rightArm');
-    if (rightArm) {
-        rightArm.rotation.z = -1.5;
-        rightArm.rotation.x = -0.5;
-        setTimeout(() => {
-            rightArm.rotation.z = -0.3;
-            rightArm.rotation.x = 0;
-        }, 300);
+    // Arm animation
+    const arm = avatarGrp.getObjectByName('rArm');
+    if (arm) {
+        arm.rotation.z = -1.6;
+        arm.rotation.x = -0.6;
+        setTimeout(() => { arm.rotation.z = -0.35; arm.rotation.x = 0; }, 280);
     }
 
-    playSound('throw');
+    snd('throw');
 }
 
-// =============================================
+// ═══════════════════════════════════════════════
 //  PHASE 4 — TARGETS + COLLISION
-// =============================================
+// ═══════════════════════════════════════════════
 function spawnTarget() {
-    if (state.targets.length >= MAX_TARGETS) return;
+    if (S.targets.length >= MAX_TGTS) return;
 
-    const hw = BOX_SIZE.w * 0.3;
-    const hd = BOX_SIZE.d * 0.3;
-    const waterY = -BOX_SIZE.h / 2 + POOL_DEPTH;
-
-    const types = ['sphere', 'ring', 'diamond', 'cube'];
-    const type = types[Math.floor(Math.random() * types.length)];
-
-    let mesh, hitRadius;
+    const hw = POOL.w * 0.38, hd = POOL.d * 0.38;
     const x = (Math.random() - 0.5) * hw * 2;
     const z = (Math.random() - 0.5) * hd * 2;
-    const y = waterY + 0.5 + Math.random() * 2.5;
+    const y = 0.5 + Math.random() * 2.8;
 
-    const colors = [COLORS.magenta, COLORS.orange, COLORS.yellow, COLORS.green, COLORS.cyan];
-    const color = colors[Math.floor(Math.random() * colors.length)];
+    const kinds = ['sphere', 'torus', 'octa', 'box', 'star'];
+    const kind = kinds[Math.floor(Math.random() * kinds.length)];
+    const cols = [C.magenta, C.orange, C.gold, C.green, C.red, C.cyan];
+    const col = cols[Math.floor(Math.random() * cols.length)];
 
-    if (type === 'sphere') {
-        mesh = new THREE.Mesh(
-            new THREE.SphereGeometry(0.3, 16, 16),
-            new THREE.MeshPhysicalMaterial({
-                color, emissive: color, emissiveIntensity: 0.4,
-                transparent: true, opacity: 0.8, roughness: 0.1, metalness: 0.5,
-            })
-        );
-        hitRadius = 0.5;
-    } else if (type === 'ring') {
-        mesh = new THREE.Mesh(
-            new THREE.TorusGeometry(0.35, 0.08, 8, 24),
-            new THREE.MeshPhysicalMaterial({
-                color, emissive: color, emissiveIntensity: 0.4,
-                transparent: true, opacity: 0.8,
-            })
-        );
-        hitRadius = 0.6;
-    } else if (type === 'diamond') {
-        mesh = new THREE.Mesh(
-            new THREE.OctahedronGeometry(0.3, 0),
-            new THREE.MeshPhysicalMaterial({
-                color, emissive: color, emissiveIntensity: 0.5,
-                transparent: true, opacity: 0.85, roughness: 0.05, metalness: 0.9,
-            })
-        );
-        hitRadius = 0.5;
-    } else {
-        mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(0.4, 0.4, 0.4),
-            new THREE.MeshPhysicalMaterial({
-                color, emissive: color, emissiveIntensity: 0.4,
-                transparent: true, opacity: 0.8,
-            })
-        );
-        hitRadius = 0.5;
+    let mesh, hr;
+    const mat = new THREE.MeshPhysicalMaterial({
+        color: col, emissive: col, emissiveIntensity: 0.45,
+        transparent: true, opacity: 0.82,
+        roughness: 0.08, metalness: 0.55,
+    });
+
+    if (kind === 'sphere')     { mesh = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 16), mat); hr = 0.5; }
+    else if (kind === 'torus') { mesh = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.08, 8, 24), mat); hr = 0.55; }
+    else if (kind === 'octa')  { mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), mat); hr = 0.5; }
+    else if (kind === 'box')   { mesh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), mat); hr = 0.5; }
+    else { // star = dodecahedron
+        mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.26, 0), mat); hr = 0.5;
     }
 
-    // Glow sphere around target
-    const glowMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(hitRadius, 8, 8),
-        new THREE.MeshBasicMaterial({
-            color,
-            transparent: true,
-            opacity: 0.08,
-        })
-    );
-    mesh.add(glowMesh);
+    // glow aura
+    mesh.add(new THREE.Mesh(
+        new THREE.SphereGeometry(hr * 0.9, 8, 8),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.06 })
+    ));
 
     mesh.position.set(x, y, z);
     scene.add(mesh);
 
-    const points = type === 'diamond' ? 150 : type === 'ring' ? 200 : type === 'cube' ? 100 : 100;
+    const pts = kind === 'torus' ? 200 : kind === 'octa' ? 150 : kind === 'star' ? 180 : 100;
 
-    state.targets.push({
-        mesh,
-        type,
-        hitRadius,
-        alive: true,
-        age: 0,
-        points,
+    S.targets.push({
+        mesh, kind, hr, alive: true, age: 0, pts, col,
         baseY: y,
-        color,
-        floatSpeed: 0.5 + Math.random() * 1.5,
-        floatOffset: Math.random() * Math.PI * 2,
-        rotSpeed: new THREE.Vector3(
-            (Math.random() - 0.5) * 2,
-            (Math.random() - 0.5) * 2,
-            (Math.random() - 0.5) * 2
+        fSpd: 0.4 + Math.random() * 1.2,
+        fOff: Math.random() * Math.PI * 2,
+        rSpd: new THREE.Vector3(
+            (Math.random() - 0.5) * 2.5,
+            (Math.random() - 0.5) * 2.5,
+            (Math.random() - 0.5) * 2.5
         ),
     });
 }
 
-function checkCollisions(dt) {
-    for (let i = state.throwables.length - 1; i >= 0; i--) {
-        const t = state.throwables[i];
-        if (!t.alive) continue;
+function collisions() {
+    for (let i = S.projectiles.length - 1; i >= 0; i--) {
+        const p = S.projectiles[i];
+        if (!p.alive) continue;
 
-        for (let j = state.targets.length - 1; j >= 0; j--) {
-            const target = state.targets[j];
-            if (!target.alive) continue;
+        for (let j = S.targets.length - 1; j >= 0; j--) {
+            const tg = S.targets[j];
+            if (!tg.alive) continue;
 
-            const dist = t.mesh.position.distanceTo(target.mesh.position);
-            if (dist < target.hitRadius + 0.2) {
-                // HIT!
-                target.alive = false;
-                t.alive = false;
+            if (p.mesh.position.distanceTo(tg.mesh.position) < tg.hr + 0.22) {
+                tg.alive = false;
+                p.alive = false;
 
-                // Update combo
-                const now = Date.now();
-                if (now - state.lastComboTime < state.comboTimeout) {
-                    state.combo++;
-                    if (state.combo > state.maxCombo) state.maxCombo = state.combo;
-                } else {
-                    state.combo = 1;
-                }
-                state.lastComboTime = now;
+                // Combo
+                const now = performance.now();
+                if (now - S.lastCombo < COMBO_MS) {
+                    S.combo++;
+                    if (S.combo > S.maxCombo) S.maxCombo = S.combo;
+                } else S.combo = 1;
+                S.lastCombo = now;
 
-                const points = Math.round(target.points * state.combo);
-                state.score += points;
-                state.totalHits++;
+                const pts = Math.round(tg.pts * S.combo);
+                S.score += pts;
+                S.hits++;
 
-                // Effects
-                spawnHitParticles(target.mesh.position.clone(), target.color);
-                showHitFeedback(points);
-                playSound('hit');
+                burstParticles(tg.mesh.position.clone(), tg.col, 35);
+                hitPopup(pts, S.combo);
+                snd('hit');
 
-                // Remove meshes
-                scene.remove(target.mesh);
-                scene.remove(t.mesh);
-                state.targets.splice(j, 1);
-                state.throwables.splice(i, 1);
+                scene.remove(tg.mesh);
+                scene.remove(p.mesh);
+                S.targets.splice(j, 1);
+                S.projectiles.splice(i, 1);
 
-                updateUI();
+                refreshHUD();
                 break;
             }
         }
     }
 }
 
-// =============================================
-//  PHASE 5 — UI MANAGEMENT
-// =============================================
-function updateUI() {
-    dom.scoreValue.textContent = state.score;
-    dom.comboValue.textContent = `x${state.combo}`;
-    dom.waveValue.textContent = state.wave;
+// ═══════════════════════════════════════════════
+//  PHASE 5 — UI
+// ═══════════════════════════════════════════════
+function refreshHUD() {
+    $.scoreV.textContent = S.score;
+    $.comboV.textContent = `×${S.combo}`;
+    $.waveV.textContent = S.wave;
 
-    // Combo pop effect
-    dom.comboValue.classList.add('pop');
-    setTimeout(() => dom.comboValue.classList.remove('pop'), 200);
+    // combo pop
+    $.comboV.style.transform = 'scale(1.3)';
+    setTimeout(() => $.comboV.style.transform = '', 180);
 
-    // Timer
-    const seconds = Math.ceil(state.timer);
-    dom.timerValue.textContent = seconds;
-    dom.timerValue.classList.remove('warning', 'critical');
-    if (seconds <= 10) dom.timerValue.classList.add('critical');
-    else if (seconds <= 20) dom.timerValue.classList.add('warning');
-
-    // Lives
-    const orbs = dom.livesValue.querySelectorAll('.life-orb');
-    orbs.forEach((orb, i) => {
-        orb.classList.remove('active', 'lost');
-        if (i < state.lives) orb.classList.add('active');
-        else orb.classList.add('lost');
-    });
+    const sec = Math.ceil(S.timer);
+    $.timerV.textContent = sec;
+    $.timerV.classList.remove('warn', 'crit');
+    if (sec <= 10) $.timerV.classList.add('crit');
+    else if (sec <= 20) $.timerV.classList.add('warn');
 }
 
-function showHitFeedback(points) {
-    dom.hitText.textContent = `+${points}`;
-    dom.hitFeedback.classList.remove('hidden');
-
-    // Reset animation
-    const el = dom.hitText;
-    el.style.animation = 'none';
-    el.offsetHeight; // trigger reflow
-    el.style.animation = '';
-
-    setTimeout(() => dom.hitFeedback.classList.add('hidden'), 800);
+function renderLives() {
+    $.livesV.innerHTML = '';
+    for (let i = 0; i < MAX_LIVES; i++) {
+        const pip = document.createElement('span');
+        pip.className = 'life-pip' + (i < S.lives ? '' : ' dead');
+        $.livesV.appendChild(pip);
+    }
 }
 
-function showNotification(text, duration = 1500) {
-    dom.notification.textContent = text;
-    dom.notification.classList.remove('hidden');
-    dom.notification.style.animation = 'none';
-    dom.notification.offsetHeight;
-    dom.notification.style.animation = '';
-    setTimeout(() => dom.notification.classList.add('hidden'), duration);
+function hitPopup(pts, combo) {
+    const col = combo >= 4 ? '#ffcc00' : combo >= 2 ? '#ff8800' : '#00ff88';
+    $.hitPop.innerHTML = `<span style="color:${col}; text-shadow:0 0 20px ${col}">+${pts}</span>`;
+    if (combo > 1) $.hitPop.innerHTML += `<br><span style="font-size:1.2rem;color:#ff00ff;text-shadow:0 0 12px #ff00ff;">×${combo} COMBO!</span>`;
+    $.hitPop.classList.remove('hidden');
+    $.hitPop.style.animation = 'none';
+    $.hitPop.offsetHeight;
+    $.hitPop.style.animation = '';
+    setTimeout(() => $.hitPop.classList.add('hidden'), 900);
 }
 
-function showGameOver() {
-    state.running = false;
-    const accuracy = state.totalThrows > 0
-        ? Math.round((state.totalHits / state.totalThrows) * 100) : 0;
-
-    dom.finalScore.textContent = state.score;
-    dom.finalCombo.textContent = `x${state.maxCombo}`;
-    dom.finalHits.textContent = state.totalHits;
-    dom.finalAccuracy.textContent = `${accuracy}%`;
-    dom.gameOver.classList.remove('hidden');
-
-    playSound('gameOver');
+function notify(txt, ms = 1500) {
+    $.notif.textContent = txt;
+    $.notif.classList.remove('hidden');
+    $.notif.style.animation = 'none';
+    $.notif.offsetHeight;
+    $.notif.style.animation = '';
+    setTimeout(() => $.notif.classList.add('hidden'), ms);
 }
 
-// =============================================
+function gameOver() {
+    S.on = false;
+    const acc = S.throws > 0 ? Math.round(S.hits / S.throws * 100) : 0;
+    $.fScore.textContent = S.score;
+    $.fHits.textContent  = S.hits;
+    $.fAcc.textContent   = acc + '%';
+    $.fCombo.textContent = `×${S.maxCombo}`;
+    $.over.classList.remove('hidden');
+    snd('over');
+}
+
+// ═══════════════════════════════════════════════
 //  PHASE 6 — SOUND + PARTICLES
-// =============================================
+// ═══════════════════════════════════════════════
 
-// --- Sound Generation (Web Audio API) ---
-function initAudio() {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-}
+// ── Procedural Audio ──
+function initAudio() { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 
-function playSound(type) {
+function snd(type) {
     if (!audioCtx) return;
     try {
-        const now = audioCtx.currentTime;
-
+        const t = audioCtx.currentTime;
         if (type === 'throw') {
-            // Swoosh sound
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(800, now);
-            osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
-            gain.gain.setValueAtTime(0.12, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-            osc.connect(gain).connect(audioCtx.destination);
-            osc.start(now);
-            osc.stop(now + 0.2);
-
+            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.type = 'sawtooth';
+            o.frequency.setValueAtTime(900, t);
+            o.frequency.exponentialRampToValueAtTime(180, t + 0.18);
+            g.gain.setValueAtTime(0.1, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+            o.connect(g).connect(audioCtx.destination);
+            o.start(t); o.stop(t + 0.2);
         } else if (type === 'hit') {
-            // Ding sound
-            const osc1 = audioCtx.createOscillator();
-            const osc2 = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc1.type = 'sine';
-            osc1.frequency.setValueAtTime(1200, now);
-            osc1.frequency.exponentialRampToValueAtTime(1800, now + 0.05);
-            osc2.type = 'sine';
-            osc2.frequency.setValueAtTime(1600, now);
-            gain.gain.setValueAtTime(0.15, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-            osc1.connect(gain);
-            osc2.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc1.start(now);
-            osc2.start(now);
-            osc1.stop(now + 0.4);
-            osc2.stop(now + 0.4);
-
-        } else if (type === 'splash') {
-            // Noise burst for splash
-            const bufferSize = audioCtx.sampleRate * 0.3;
-            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-            const data = buffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) {
-                data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.15));
-            }
-            const noise = audioCtx.createBufferSource();
-            noise.buffer = buffer;
-            const filter = audioCtx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(3000, now);
-            filter.frequency.exponentialRampToValueAtTime(200, now + 0.25);
-            const gain = audioCtx.createGain();
-            gain.gain.setValueAtTime(0.2, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-            noise.connect(filter).connect(gain).connect(audioCtx.destination);
-            noise.start(now);
-
-        } else if (type === 'miss') {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'square';
-            osc.frequency.setValueAtTime(200, now);
-            osc.frequency.exponentialRampToValueAtTime(80, now + 0.25);
-            gain.gain.setValueAtTime(0.08, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-            osc.connect(gain).connect(audioCtx.destination);
-            osc.start(now);
-            osc.stop(now + 0.3);
-
-        } else if (type === 'gameOver') {
-            // Descending tones
-            [800, 600, 400, 200].forEach((freq, i) => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, now + i * 0.2);
-                gain.gain.setValueAtTime(0.1, now + i * 0.2);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.2 + 0.4);
-                osc.connect(gain).connect(audioCtx.destination);
-                osc.start(now + i * 0.2);
-                osc.stop(now + i * 0.2 + 0.4);
+            [1100, 1500, 2000].forEach((f, i) => {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'sine';
+                o.frequency.setValueAtTime(f, t + i * 0.04);
+                g.gain.setValueAtTime(0.12, t + i * 0.04);
+                g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.04 + 0.35);
+                o.connect(g).connect(audioCtx.destination);
+                o.start(t + i * 0.04); o.stop(t + i * 0.04 + 0.35);
             });
-
+        } else if (type === 'splash') {
+            const n = audioCtx.sampleRate * 0.28;
+            const buf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (n * 0.12));
+            const src = audioCtx.createBufferSource(); src.buffer = buf;
+            const flt = audioCtx.createBiquadFilter();
+            flt.type = 'lowpass'; flt.frequency.setValueAtTime(2800, t); flt.frequency.exponentialRampToValueAtTime(150, t + 0.25);
+            const g = audioCtx.createGain(); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+            src.connect(flt).connect(g).connect(audioCtx.destination); src.start(t);
+        } else if (type === 'miss') {
+            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.type = 'square';
+            o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.3);
+            g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+            o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t + 0.3);
+        } else if (type === 'over') {
+            [700, 500, 350, 180].forEach((f, i) => {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'sine'; o.frequency.setValueAtTime(f, t + i * 0.22);
+                g.gain.setValueAtTime(0.09, t + i * 0.22); g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.22 + 0.4);
+                o.connect(g).connect(audioCtx.destination); o.start(t + i * 0.22); o.stop(t + i * 0.22 + 0.4);
+            });
         } else if (type === 'wave') {
-            // Ascending chime
-            [600, 800, 1000, 1400].forEach((freq, i) => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, now + i * 0.1);
-                gain.gain.setValueAtTime(0.1, now + i * 0.1);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.3);
-                osc.connect(gain).connect(audioCtx.destination);
-                osc.start(now + i * 0.1);
-                osc.stop(now + i * 0.1 + 0.3);
+            [500, 700, 900, 1300].forEach((f, i) => {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'sine'; o.frequency.setValueAtTime(f, t + i * 0.09);
+                g.gain.setValueAtTime(0.1, t + i * 0.09); g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.09 + 0.3);
+                o.connect(g).connect(audioCtx.destination); o.start(t + i * 0.09); o.stop(t + i * 0.09 + 0.3);
             });
         }
-    } catch (e) {
-        // Audio failed silently
-    }
+    } catch (_) {}
 }
 
-// --- Particle System ---
-function spawnHitParticles(position, color) {
-    const count = 30;
+// ── Particle Effects ──
+function burstParticles(pos, col, count = 25) {
+    const N = count;
     const geo = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const velocities = [];
-    const sizes = new Float32Array(count);
-
-    for (let i = 0; i < count; i++) {
-        positions[i * 3] = position.x;
-        positions[i * 3 + 1] = position.y;
-        positions[i * 3 + 2] = position.z;
-
-        velocities.push(new THREE.Vector3(
-            (Math.random() - 0.5) * 8,
-            (Math.random() - 0.5) * 8,
-            (Math.random() - 0.5) * 8
+    const arr = new Float32Array(N * 3);
+    const vels = [];
+    for (let i = 0; i < N; i++) {
+        arr[i*3]=pos.x; arr[i*3+1]=pos.y; arr[i*3+2]=pos.z;
+        vels.push(new THREE.Vector3(
+            (Math.random()-.5)*9, (Math.random()-.5)*9, (Math.random()-.5)*9
         ));
-
-        sizes[i] = 0.08 + Math.random() * 0.12;
     }
-
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
     const mat = new THREE.PointsMaterial({
-        color,
-        size: 0.15,
-        transparent: true,
-        opacity: 1,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
+        color: col, size: 0.13,
+        transparent: true, opacity: 1,
+        blending: THREE.AdditiveBlending, depthWrite: false,
         sizeAttenuation: true,
     });
-
-    const points = new THREE.Points(geo, mat);
-    scene.add(points);
-
-    state.particles.push({
-        points,
-        velocities,
-        age: 0,
-        maxAge: 1.2,
-        startOpacity: 1,
-    });
+    const pts = new THREE.Points(geo, mat);
+    scene.add(pts);
+    S.particles.push({ pts, vels, age: 0, life: 1.1 });
 }
 
-function spawnSplashParticles(position) {
-    const count = 20;
+function splashParticles(pos) {
+    const N = 22;
     const geo = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const velocities = [];
-
-    for (let i = 0; i < count; i++) {
-        positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
-        positions[i * 3 + 1] = position.y;
-        positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
-
-        velocities.push(new THREE.Vector3(
-            (Math.random() - 0.5) * 3,
-            3 + Math.random() * 5,
-            (Math.random() - 0.5) * 3
+    const arr = new Float32Array(N * 3);
+    const vels = [];
+    for (let i = 0; i < N; i++) {
+        arr[i*3]=pos.x+(Math.random()-.5)*.25;
+        arr[i*3+1]=pos.y;
+        arr[i*3+2]=pos.z+(Math.random()-.5)*.25;
+        vels.push(new THREE.Vector3(
+            (Math.random()-.5)*2.5, 3+Math.random()*5, (Math.random()-.5)*2.5
         ));
     }
-
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
     const mat = new THREE.PointsMaterial({
-        color: COLORS.cyan,
-        size: 0.08,
-        transparent: true,
-        opacity: 0.8,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
+        color: C.cyan, size: 0.07,
+        transparent: true, opacity: 0.85,
+        blending: THREE.AdditiveBlending, depthWrite: false,
     });
-
-    const points = new THREE.Points(geo, mat);
-    scene.add(points);
-
-    state.splashParticles.push({
-        points,
-        velocities,
-        age: 0,
-        maxAge: 0.8,
-    });
+    const pts = new THREE.Points(geo, mat);
+    scene.add(pts);
+    S.particles.push({ pts, vels, age: 0, life: 0.7 });
 }
 
-function createAmbientParticles() {
-    const count = 200;
+function trailParticle(pos, col) {
     const geo = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-
-    for (let i = 0; i < count; i++) {
-        positions[i * 3] = (Math.random() - 0.5) * BOX_SIZE.w;
-        positions[i * 3 + 1] = (Math.random() - 0.5) * BOX_SIZE.h;
-        positions[i * 3 + 2] = (Math.random() - 0.5) * BOX_SIZE.d;
-    }
-
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
+    const arr = new Float32Array([pos.x, pos.y, pos.z]);
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
     const mat = new THREE.PointsMaterial({
-        color: COLORS.cyan,
-        size: 0.04,
-        transparent: true,
-        opacity: 0.3,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
+        color: col, size: 0.06,
+        transparent: true, opacity: 0.6,
+        blending: THREE.AdditiveBlending, depthWrite: false,
     });
-
-    state.ambientParticles = new THREE.Points(geo, mat);
-    scene.add(state.ambientParticles);
+    const pts = new THREE.Points(geo, mat);
+    scene.add(pts);
+    S.particles.push({ pts, vels: [new THREE.Vector3()], age: 0, life: 0.4 });
 }
 
-function updateParticles(dt) {
-    // Hit particles
-    for (let i = state.particles.length - 1; i >= 0; i--) {
-        const p = state.particles[i];
+function tickParticles(dt) {
+    for (let i = S.particles.length - 1; i >= 0; i--) {
+        const p = S.particles[i];
         p.age += dt;
-
-        if (p.age >= p.maxAge) {
-            scene.remove(p.points);
-            p.points.geometry.dispose();
-            p.points.material.dispose();
-            state.particles.splice(i, 1);
-            continue;
+        if (p.age >= p.life) {
+            scene.remove(p.pts); p.pts.geometry.dispose(); p.pts.material.dispose();
+            S.particles.splice(i, 1); continue;
         }
-
-        const positions = p.points.geometry.attributes.position.array;
-        const progress = p.age / p.maxAge;
-
-        for (let j = 0; j < p.velocities.length; j++) {
-            p.velocities[j].y += GRAVITY * 0.3 * dt;
-            positions[j * 3] += p.velocities[j].x * dt;
-            positions[j * 3 + 1] += p.velocities[j].y * dt;
-            positions[j * 3 + 2] += p.velocities[j].z * dt;
+        const prog = p.age / p.life;
+        const arr = p.pts.geometry.attributes.position.array;
+        for (let j = 0; j < p.vels.length; j++) {
+            p.vels[j].y += GRAVITY * 0.25 * dt;
+            arr[j*3]   += p.vels[j].x * dt;
+            arr[j*3+1] += p.vels[j].y * dt;
+            arr[j*3+2] += p.vels[j].z * dt;
         }
-
-        p.points.geometry.attributes.position.needsUpdate = true;
-        p.points.material.opacity = (1 - progress) * p.startOpacity;
-        p.points.material.size = 0.15 * (1 - progress * 0.5);
+        p.pts.geometry.attributes.position.needsUpdate = true;
+        p.pts.material.opacity = (1 - prog);
+        p.pts.material.size = p.pts.material.size * (1 - dt * 0.5);
     }
 
-    // Splash particles
-    for (let i = state.splashParticles.length - 1; i >= 0; i--) {
-        const p = state.splashParticles[i];
-        p.age += dt;
-
-        if (p.age >= p.maxAge) {
-            scene.remove(p.points);
-            p.points.geometry.dispose();
-            p.points.material.dispose();
-            state.splashParticles.splice(i, 1);
-            continue;
+    // Ambient dust drift
+    if (ambientPts) {
+        const t = clock.elapsedTime;
+        const a = ambientPts.geometry.attributes.position.array;
+        for (let i = 0; i < a.length / 3; i++) {
+            a[i*3+1] += Math.sin(t + i * 0.7) * 0.0015;
+            a[i*3]   += Math.cos(t * 0.4 + i * 1.1) * 0.001;
         }
-
-        const positions = p.points.geometry.attributes.position.array;
-        for (let j = 0; j < p.velocities.length; j++) {
-            p.velocities[j].y += GRAVITY * dt;
-            positions[j * 3] += p.velocities[j].x * dt;
-            positions[j * 3 + 1] += p.velocities[j].y * dt;
-            positions[j * 3 + 2] += p.velocities[j].z * dt;
-        }
-
-        p.points.geometry.attributes.position.needsUpdate = true;
-        p.points.material.opacity = 0.8 * (1 - p.age / p.maxAge);
-    }
-
-    // Ambient particles float
-    if (state.ambientParticles) {
-        const positions = state.ambientParticles.geometry.attributes.position.array;
-        const time = clock.elapsedTime;
-        for (let i = 0; i < positions.length / 3; i++) {
-            positions[i * 3 + 1] += Math.sin(time + i) * 0.002;
-            positions[i * 3] += Math.cos(time * 0.5 + i * 0.7) * 0.001;
-        }
-        state.ambientParticles.geometry.attributes.position.needsUpdate = true;
-        state.ambientParticles.material.opacity = 0.15 + Math.sin(time * 0.5) * 0.1;
+        ambientPts.geometry.attributes.position.needsUpdate = true;
+        ambientPts.material.opacity = 0.12 + Math.sin(t * 0.3) * 0.08;
     }
 }
 
-// =============================================
-//  POST-PROCESSING (Bloom)
-// =============================================
-function setupPostProcessing() {
+// ── Post-Processing ──
+function initPostFX() {
     composer = new EffectComposer(renderer);
-    const renderPass = new RenderPass(scene, camera);
-    composer.addPass(renderPass);
-
-    const bloomPass = new UnrealBloomPass(
-        new THREE.Vector2(window.innerWidth, window.innerHeight),
-        1.2,  // strength
-        0.5,  // radius
-        0.3   // threshold
+    composer.addPass(new RenderPass(scene, cam));
+    const bloom = new UnrealBloomPass(
+        new THREE.Vector2(innerWidth, innerHeight),
+        1.4, 0.55, 0.25
     );
-    composer.addPass(bloomPass);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
 }
 
-// =============================================
-//  PHYSICS UPDATE
-// =============================================
-function updatePhysics(dt) {
-    const waterY = -BOX_SIZE.h / 2 + POOL_DEPTH;
-    const poolW = BOX_SIZE.w * 0.375;
-    const poolD = BOX_SIZE.d * 0.375;
+// ═══════════════════════════════════════════════
+//  PHYSICS
+// ═══════════════════════════════════════════════
+function tickPhysics(dt) {
+    const wY = 0; // water surface y
+    const poolHW = POOL.w / 2, poolHD = POOL.d / 2;
 
-    for (let i = state.throwables.length - 1; i >= 0; i--) {
-        const t = state.throwables[i];
-        if (!t.alive) continue;
+    for (let i = S.projectiles.length - 1; i >= 0; i--) {
+        const p = S.projectiles[i];
+        if (!p.alive) continue;
 
-        t.age += dt;
+        p.age += dt;
+        p.vel.y += GRAVITY * dt;
 
-        // Apply gravity
-        t.velocity.y += GRAVITY * dt;
+        p.mesh.position.x += p.vel.x * dt;
+        p.mesh.position.y += p.vel.y * dt;
+        p.mesh.position.z += p.vel.z * dt;
 
-        // Move
-        t.mesh.position.x += t.velocity.x * dt;
-        t.mesh.position.y += t.velocity.y * dt;
-        t.mesh.position.z += t.velocity.z * dt;
+        // rotate
+        if (p.type === 'ring') { p.mesh.rotation.x += dt * 6; p.mesh.rotation.z += dt * 3; }
+        else if (p.type === 'diver') { p.mesh.rotation.x += dt * 5; }
+        else { p.mesh.rotation.x += dt * 3; p.mesh.rotation.y += dt * 2; }
 
-        // Rotate
-        if (t.type === 'ring') {
-            t.mesh.rotation.x += dt * 5;
-            t.mesh.rotation.z += dt * 3;
-        } else if (t.type === 'diver') {
-            t.mesh.rotation.x += dt * 4;
-        } else {
-            t.mesh.rotation.x += dt * 3;
-            t.mesh.rotation.z += dt * 2;
+        // trail
+        p.trailT += dt;
+        if (p.trailT > 0.04) {
+            p.trailT = 0;
+            const tc = p.type === 'ball' ? C.cyan : p.type === 'ring' ? C.magenta : C.green;
+            trailParticle(p.mesh.position.clone(), tc);
         }
 
-        // Check water collision
-        if (t.mesh.position.y <= waterY && !t.inWater) {
-            const px = t.mesh.position.x;
-            const pz = t.mesh.position.z;
-
-            if (Math.abs(px) < poolW && Math.abs(pz) < poolD) {
-                t.inWater = true;
-                t.velocity.multiplyScalar(0.3);
-                t.velocity.y = Math.abs(t.velocity.y) * 0.1;
-                spawnSplashParticles(t.mesh.position.clone());
-                playSound('splash');
+        // water hit
+        if (p.mesh.position.y <= wY && !p.wet) {
+            const px = p.mesh.position.x, pz = p.mesh.position.z;
+            if (Math.abs(px) < poolHW && Math.abs(pz) < poolHD) {
+                p.wet = true;
+                p.vel.multiplyScalar(0.25);
+                p.vel.y = Math.abs(p.vel.y) * 0.08;
+                splashParticles(p.mesh.position.clone());
+                snd('splash');
             }
         }
 
-        // Water drag
-        if (t.inWater) {
-            t.velocity.multiplyScalar(1 - dt * 3);
-        }
+        // water drag
+        if (p.wet) p.vel.multiplyScalar(1 - dt * 3.5);
 
-        // Check out of bounds / expired
-        const hw = BOX_SIZE.w / 2 + 2;
-        const hh = BOX_SIZE.h / 2 + 2;
-        const hd = BOX_SIZE.d / 2 + 2;
+        // bounds
+        const gone = p.age > 5 ||
+            Math.abs(p.mesh.position.x) > poolHW + 4 ||
+            p.mesh.position.y < -POOL.depth - 2 ||
+            Math.abs(p.mesh.position.z) > poolHD + 6;
 
-        if (t.age > 5 ||
-            Math.abs(t.mesh.position.x) > hw ||
-            t.mesh.position.y < -hh ||
-            Math.abs(t.mesh.position.z) > hd) {
+        if (gone) {
+            p.alive = false;
+            scene.remove(p.mesh);
+            S.projectiles.splice(i, 1);
 
-            // Miss — lose a life if didn't hit anything
-            if (!t.inWater || t.age > 4) {
-                t.alive = false;
-                scene.remove(t.mesh);
-                state.throwables.splice(i, 1);
+            S.lives--;
+            S.combo = 1;
+            renderLives();
+            snd('miss');
+            refreshHUD();
 
-                state.lives--;
-                state.combo = 1;
-                playSound('miss');
-                updateUI();
-
-                if (state.lives <= 0) {
-                    showGameOver();
-                    return;
-                }
-            }
+            if (S.lives <= 0) { gameOver(); return; }
         }
     }
 }
 
-// =============================================
+// ═══════════════════════════════════════════════
 //  GAME LOOP
-// =============================================
-let targetSpawnTimer = 0;
-let waveTimer = 0;
-
-function animate() {
-    requestAnimationFrame(animate);
+// ═══════════════════════════════════════════════
+function tick() {
+    requestAnimationFrame(tick);
 
     const dt = Math.min(clock.getDelta(), 0.05);
-    const time = clock.elapsedTime;
+    const t  = clock.elapsedTime;
 
-    // Update water shader
-    if (waterMaterial) {
-        waterMaterial.uniforms.uTime.value = time;
+    // Water anim
+    if (waterMat)   waterMat.uniforms.uTime.value = t;
+    if (causticMat) causticMat.uniforms.uTime.value = t;
+
+    // Avatar idle
+    if (avatarGrp) {
+        avatarGrp.position.y = 0.35 + Math.sin(t * 1.3) * 0.04;
+        const br = avatarGrp.getObjectByName('baseRing');
+        if (br) { br.rotation.z = t * 0.4; br.material.opacity = 0.18 + Math.sin(t * 2) * 0.08; }
     }
 
-    // Animate avatar
-    if (avatarGroup) {
-        avatarGroup.position.y = -BOX_SIZE.h / 2 + POOL_DEPTH + 0.3 + Math.sin(time * 1.5) * 0.05;
-        const glowRing = avatarGroup.getObjectByName('glowRing');
-        if (glowRing) {
-            glowRing.rotation.z = time * 0.5;
-            glowRing.material.opacity = 0.2 + Math.sin(time * 2) * 0.1;
-        }
-    }
-
-    // Animate targets
-    state.targets.forEach(target => {
-        if (!target.alive) return;
-        target.age += dt;
-        target.mesh.position.y = target.baseY + Math.sin(time * target.floatSpeed + target.floatOffset) * 0.3;
-        target.mesh.rotation.x += target.rotSpeed.x * dt;
-        target.mesh.rotation.y += target.rotSpeed.y * dt;
-        target.mesh.rotation.z += target.rotSpeed.z * dt;
-
-        // Pulse glow
-        const scale = 1 + Math.sin(time * 3 + target.floatOffset) * 0.05;
-        target.mesh.scale.setScalar(scale);
+    // Target float + spin
+    S.targets.forEach(tg => {
+        if (!tg.alive) return;
+        tg.age += dt;
+        tg.mesh.position.y = tg.baseY + Math.sin(t * tg.fSpd + tg.fOff) * 0.25;
+        tg.mesh.rotation.x += tg.rSpd.x * dt;
+        tg.mesh.rotation.y += tg.rSpd.y * dt;
+        tg.mesh.rotation.z += tg.rSpd.z * dt;
+        const sc = 1 + Math.sin(t * 2.5 + tg.fOff) * 0.04;
+        tg.mesh.scale.setScalar(sc);
     });
 
-    // Animate holobox edges
-    if (holoBox) {
-        holoBox.children.forEach((child, i) => {
-            if (child.isLine && child.material) {
-                child.material.opacity = 0.25 + Math.sin(time * 1.5 + i * 0.5) * 0.1;
+    // Pool pillar orbs pulse
+    if (poolGrp) {
+        poolGrp.children.forEach(c => {
+            if (c.isMesh && c.geometry.type === 'SphereGeometry' && c.material.opacity !== undefined && c.material.opacity < 0.5) {
+                c.material.opacity = 0.07 + Math.sin(t * 2 + c.position.x) * 0.05;
             }
         });
     }
 
-    // Power bar charging
-    if (state.isCharging) {
-        const elapsed = (Date.now() - state.chargeStart) / 1000;
-        state.chargePower = Math.min(elapsed / 1.5, 1);
-        dom.powerFill.style.width = `${state.chargePower * 100}%`;
+    // Power bar
+    if (S.charging) {
+        const elapsed = (performance.now() - S.chargeT0) / 1000;
+        S.power = Math.min(elapsed / 1.4, 1);
+        $.powerFill.style.width = S.power * 100 + '%';
+        $.powerPct.textContent = Math.round(S.power * 100) + '%';
     }
 
-    if (state.running) {
-        // Timer countdown
-        state.timer -= dt;
-        if (state.timer <= 0) {
-            state.timer = 0;
-            showGameOver();
-            return;
+    if (S.on) {
+        S.timer -= dt;
+        if (S.timer <= 0) { S.timer = 0; gameOver(); return; }
+
+        S.spawnCd += dt;
+        const interval = Math.max(0.7, 2.2 - S.wave * 0.25);
+        if (S.spawnCd >= interval) { spawnTarget(); S.spawnCd = 0; }
+
+        S.waveCd += dt;
+        if (S.waveCd >= 22) {
+            S.wave++;
+            S.waveCd = 0;
+            notify(`WAVE ${S.wave}`);
+            snd('wave');
         }
 
-        // Spawn targets
-        targetSpawnTimer += dt;
-        const spawnInterval = Math.max(0.8, 2.5 - state.wave * 0.3);
-        if (targetSpawnTimer >= spawnInterval) {
-            spawnTarget();
-            targetSpawnTimer = 0;
+        if (performance.now() - S.lastCombo > COMBO_MS && S.combo > 1) {
+            S.combo = 1;
+            refreshHUD();
         }
 
-        // Wave progression
-        waveTimer += dt;
-        if (waveTimer >= 20) {
-            state.wave++;
-            waveTimer = 0;
-            showNotification(`WAVE ${state.wave}`);
-            playSound('wave');
-        }
-
-        // Combo timeout
-        if (Date.now() - state.lastComboTime > state.comboTimeout && state.combo > 1) {
-            state.combo = 1;
-            updateUI();
-        }
-
-        updatePhysics(dt);
-        checkCollisions(dt);
-        updateUI();
+        tickPhysics(dt);
+        collisions();
+        refreshHUD();
     }
 
-    updateParticles(dt);
-
+    tickParticles(dt);
     controls.update();
     composer.render();
 }
 
-// =============================================
-//  EVENT HANDLERS
-// =============================================
-function setupEventListeners() {
-    // Mouse move
-    window.addEventListener('mousemove', (e) => {
-        state.mouseScreen.x = e.clientX;
-        state.mouseScreen.y = e.clientY;
-        state.mouseNDC.x = (e.clientX / window.innerWidth) * 2 - 1;
-        state.mouseNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
-
-        // Move crosshair
-        dom.crosshair.style.left = e.clientX + 'px';
-        dom.crosshair.style.top = e.clientY + 'px';
-
-        // Aim avatar
-        if (avatarGroup && state.running) {
-            avatarGroup.rotation.y = state.mouseNDC.x * 0.5;
-        }
+// ═══════════════════════════════════════════════
+//  EVENTS
+// ═══════════════════════════════════════════════
+function bindEvents() {
+    window.addEventListener('mousemove', e => {
+        S.mouseXY.x = e.clientX;
+        S.mouseXY.y = e.clientY;
+        S.mouse.x = (e.clientX / innerWidth) * 2 - 1;
+        S.mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+        $.cross.style.left = e.clientX + 'px';
+        $.cross.style.top  = e.clientY + 'px';
+        if (avatarGrp && S.on) avatarGrp.rotation.y = S.mouse.x * 0.45;
     });
 
-    // Mouse down — charge
-    window.addEventListener('mousedown', (e) => {
-        if (!state.running) return;
-        if (e.button !== 0) return;
-
-        state.isCharging = true;
-        state.chargeStart = Date.now();
-        state.chargePower = 0;
-        dom.powerContainer.classList.add('visible');
-        dom.crosshair.classList.add('charging');
+    window.addEventListener('mousedown', e => {
+        if (!S.on || e.button !== 0) return;
+        S.charging = true;
+        S.chargeT0 = performance.now();
+        S.power = 0;
+        $.powerMtr.classList.add('show');
+        $.cross.classList.add('charging');
     });
 
-    // Mouse up — throw
-    window.addEventListener('mouseup', (e) => {
-        if (!state.running) return;
-        if (e.button !== 0) return;
-        if (!state.isCharging) return;
-
-        state.isCharging = false;
-        dom.powerContainer.classList.remove('visible');
-        dom.crosshair.classList.remove('charging');
-
-        throwObject();
-        state.chargePower = 0;
-        dom.powerFill.style.width = '0%';
+    window.addEventListener('mouseup', e => {
+        if (!S.on || e.button !== 0 || !S.charging) return;
+        S.charging = false;
+        $.powerMtr.classList.remove('show');
+        $.cross.classList.remove('charging');
+        doThrow();
+        S.power = 0;
+        $.powerFill.style.width = '0%';
+        $.powerPct.textContent = '0%';
     });
 
-    // Keyboard
-    window.addEventListener('keydown', (e) => {
-        if (e.key === '1') selectObject('ball');
-        if (e.key === '2') selectObject('ring');
-        if (e.key === '3') selectObject('diver');
-        if (e.key === 'r' || e.key === 'R') {
-            controls.enabled = !controls.enabled;
-        }
+    window.addEventListener('keydown', e => {
+        if (e.key === '1') pickObj('ball');
+        if (e.key === '2') pickObj('ring');
+        if (e.key === '3') pickObj('diver');
+        if (e.key.toLowerCase() === 'r') controls.enabled = !controls.enabled;
     });
 
-    // Object selector buttons
-    dom.objBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            selectObject(btn.dataset.type);
-        });
-    });
+    $.objBtns.forEach(b => b.addEventListener('click', e => {
+        e.stopPropagation();
+        pickObj(b.dataset.type);
+    }));
 
-    // Start button
-    dom.startBtn.addEventListener('click', () => {
-        initAudio();
-        startGame();
-    });
+    $.startBtn.addEventListener('click', () => { initAudio(); startGame(); });
+    $.restartBtn.addEventListener('click', () => { $.over.classList.add('hidden'); resetGame(); startGame(); });
 
-    // Restart button
-    dom.restartBtn.addEventListener('click', () => {
-        dom.gameOver.classList.add('hidden');
-        resetGame();
-        startGame();
-    });
-
-    // Resize
     window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        composer.setSize(window.innerWidth, window.innerHeight);
+        cam.aspect = innerWidth / innerHeight;
+        cam.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+        composer.setSize(innerWidth, innerHeight);
     });
 
-    // Prevent context menu
-    window.addEventListener('contextmenu', (e) => e.preventDefault());
+    window.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-function selectObject(type) {
-    state.selectedObject = type;
-    dom.objBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.type === type);
-    });
+function pickObj(type) {
+    S.objType = type;
+    $.objBtns.forEach(b => b.classList.toggle('active', b.dataset.type === type));
 }
 
 function startGame() {
-    dom.startScreen.classList.add('hidden');
-    dom.hud.style.display = 'flex';
-    dom.objectSelector.style.display = 'flex';
-    state.running = true;
-    showNotification('WAVE 1', 1200);
-    playSound('wave');
+    $.start.classList.add('hidden');
+    S.on = true;
+    notify('WAVE 1', 1200);
+    snd('wave');
 }
 
 function resetGame() {
-    // Clear throwables
-    state.throwables.forEach(t => scene.remove(t.mesh));
-    state.throwables = [];
+    S.projectiles.forEach(p => scene.remove(p.mesh));
+    S.projectiles = [];
+    S.targets.forEach(t => scene.remove(t.mesh));
+    S.targets = [];
+    S.particles.forEach(p => { scene.remove(p.pts); p.pts.geometry.dispose(); p.pts.material.dispose(); });
+    S.particles = [];
 
-    // Clear targets
-    state.targets.forEach(t => scene.remove(t.mesh));
-    state.targets = [];
+    S.score = 0; S.combo = 1; S.maxCombo = 1;
+    S.lives = MAX_LIVES; S.timer = GAME_SEC; S.wave = 1;
+    S.hits = 0; S.throws = 0; S.lastCombo = 0;
+    S.spawnCd = 0; S.waveCd = 0;
 
-    // Clear particles
-    state.particles.forEach(p => {
-        scene.remove(p.points);
-        p.points.geometry.dispose();
-        p.points.material.dispose();
-    });
-    state.particles = [];
-
-    state.splashParticles.forEach(p => {
-        scene.remove(p.points);
-        p.points.geometry.dispose();
-        p.points.material.dispose();
-    });
-    state.splashParticles = [];
-
-    // Reset state
-    state.score = 0;
-    state.combo = 1;
-    state.maxCombo = 1;
-    state.lives = MAX_LIVES;
-    state.timer = GAME_TIME;
-    state.wave = 1;
-    state.totalHits = 0;
-    state.totalThrows = 0;
-    state.lastComboTime = 0;
-    targetSpawnTimer = 0;
-    waveTimer = 0;
-
-    updateUI();
+    renderLives();
+    refreshHUD();
 }
 
-// =============================================
-//  BOOT
-// =============================================
-init();
+// ═══════════════════════════════════════════════
+boot();
