@@ -83,7 +83,7 @@ function domCache() {
 
 function initScene() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
+    scene.background = new THREE.Color(0xffffff);
 
     cam = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 150);
     cam.position.set(0, 12, 16);
@@ -107,7 +107,7 @@ function initScene() {
 
     clock = new THREE.Clock();
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    scene.add(new THREE.AmbientLight(0xffffff, 1.1));
     const dir = new THREE.DirectionalLight(0xffffff, 1.2);
     dir.position.set(4, 15, 6);
     scene.add(dir);
@@ -125,8 +125,8 @@ function buildPool() {
     const hw = POOL.w / 2, hd = POOL.d / 2, dep = POOL.depth;
 
     const tileMat = new THREE.MeshPhysicalMaterial({
-        color: 0x001a33, emissive: 0x002244, emissiveIntensity: 0.1,
-        roughness: 0.2, metalness: 0.8
+        color: 0xf3f8ff, emissive: 0x9ed7ff, emissiveIntensity: 0.08,
+        roughness: 0.18, metalness: 0.35
     });
 
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(POOL.w, POOL.d), tileMat);

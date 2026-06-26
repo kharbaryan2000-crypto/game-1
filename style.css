@@ -1,6 +1,6 @@
 /* =============================================
    HOLOBOX AQUA ARENA — HOLOGRAPHIC UI
-   Pure black bg + bright glow = holobox ready
+   White backdrop + bright pool details
    ============================================= */
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -15,7 +15,7 @@
     --red:         #ff2244;
     --yellow:      #ffee00;
     --gold:        #ffcc00;
-    --bg:          #000000;
+    --bg:          #ffffff;
     --glass:       rgba(0,10,20,0.65);
     --glass-border:rgba(0,255,255,0.18);
     --font-head:   'Orbitron', monospace, sans-serif;
@@ -64,7 +64,7 @@ html, body {
 #start-screen {
     position: fixed; inset: 0; z-index: 1000;
     display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(ellipse at 50% 60%, rgba(0,40,80,0.5) 0%, #000 65%);
+    background: radial-gradient(ellipse at 50% 60%, rgba(0,120,255,0.12) 0%, #fff 65%);
 }
 
 .start-content { text-align: center; z-index: 2; position: relative; }
