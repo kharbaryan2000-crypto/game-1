@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HoloBox — Aqua Arena</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+
+    <div id="start-screen">
+        <div class="start-content">
+            <div class="holo-logo-wrap">
+                <div class="holo-ring"></div>
+                <div class="holo-logo">
+                    <span class="logo-line top">AQUA</span>
+                    <span class="logo-line bottom">ARENA</span>
+                </div>
+            </div>
+            <div class="start-divider"></div>
+            <div class="start-instructions">
+                <div class="inst-row"><kbd>AIM</kbd> <span>Move mouse over the pool</span></div>
+                <div class="inst-row"><kbd>CLICK</kbd> <span>Click to toss ring exactly at target</span></div>
+            </div>
+            <button id="start-btn">
+                <span class="btn-text">ENTER ARENA</span>
+                <span class="btn-glow"></span>
+            </button>
+        </div>
+    </div>
+
+    <div id="game-container"></div>
+
+    <!-- Target Marker is drawn in 3D now, but keep minimal HUD -->
+    <div id="hud">
+        <div class="hud-panel hud-left">
+            <div class="hud-item">
+                <span class="hud-label">SCORE</span>
+                <span class="hud-value" id="score-value">0</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-label">COMBO</span>
+                <span class="hud-value combo" id="combo-value">×1</span>
+            </div>
+        </div>
+        <div class="hud-panel hud-center">
+            <div class="hud-item">
+                <span class="hud-label">TIME</span>
+                <span class="hud-value timer" id="timer-value">90</span>
+            </div>
+        </div>
+        <div class="hud-panel hud-right">
+            <div class="hud-item">
+                <span class="hud-label">LIVES</span>
+                <div class="hud-value" id="lives-value"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="hidden"></div>
+    <div id="hit-popup" class="hidden"></div>
+
+    <div id="game-over" class="hidden">
+        <div class="go-content">
+            <h1 class="go-title">SESSION COMPLETE</h1>
+            <div class="go-stats">
+                <div class="go-stat"><span class="go-stat-val" id="final-score">0</span><span class="go-stat-lbl">SCORE</span></div>
+                <div class="go-stat"><span class="go-stat-val" id="final-hits">0</span><span class="go-stat-lbl">HITS</span></div>
+                <div class="go-stat"><span class="go-stat-val" id="final-accuracy">0%</span><span class="go-stat-lbl">ACCURACY</span></div>
+            </div>
+            <button id="restart-btn"><span class="btn-text">PLAY AGAIN</span></button>
+        </div>
+    </div>
+
+
+    <script type="module" src="game.js"></script>
+</body>
+</html>
