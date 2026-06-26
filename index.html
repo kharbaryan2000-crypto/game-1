@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HoloBox — Aqua Strike</title>
+    <meta name="description" content="A holographic 3D pool game — throw objects at targets in a futuristic water arena">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Scanline holographic overlay -->
+    <div class="scanlines"></div>
+
+    <!-- Start Screen -->
+    <div id="start-screen">
+        <div class="start-content">
+            <div class="holo-logo">
+                <span class="logo-line">HOLO</span>
+                <span class="logo-line accent">BOX</span>
+            </div>
+            <h2 class="subtitle">AQUA STRIKE</h2>
+            <p class="tagline">Throw • Strike • Dominate</p>
+            <div class="start-instructions">
+                <div class="inst-row"><kbd>MOUSE</kbd> Aim</div>
+                <div class="inst-row"><kbd>CLICK</kbd> Hold & Release to Throw</div>
+                <div class="inst-row"><kbd>1 2 3</kbd> Select Object</div>
+                <div class="inst-row"><kbd>R</kbd> Rotate Camera</div>
+            </div>
+            <button id="start-btn">
+                <span class="btn-text">INITIALIZE</span>
+                <span class="btn-glow"></span>
+            </button>
+        </div>
+        <div class="grid-floor"></div>
+    </div>
+
+    <!-- Game Container -->
+    <div id="game-container"></div>
+
+    <!-- Crosshair -->
+    <div id="crosshair">
+        <div class="ch-ring"></div>
+        <div class="ch-dot"></div>
+        <div class="ch-line ch-top"></div>
+        <div class="ch-line ch-right"></div>
+        <div class="ch-line ch-bottom"></div>
+        <div class="ch-line ch-left"></div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud">
+        <div class="hud-panel hud-left">
+            <div class="hud-item" id="score-display">
+                <span class="hud-label">SCORE</span>
+                <span class="hud-value" id="score-value">0</span>
+            </div>
+            <div class="hud-item" id="combo-display">
+                <span class="hud-label">COMBO</span>
+                <span class="hud-value" id="combo-value">x1</span>
+            </div>
+        </div>
+        <div class="hud-panel hud-center">
+            <div class="hud-item" id="timer-display">
+                <span class="hud-label">TIME</span>
+                <span class="hud-value" id="timer-value">60</span>
+            </div>
+            <div class="hud-item" id="wave-display">
+                <span class="hud-label">WAVE</span>
+                <span class="hud-value" id="wave-value">1</span>
+            </div>
+        </div>
+        <div class="hud-panel hud-right">
+            <div class="hud-item" id="lives-display">
+                <span class="hud-label">LIVES</span>
+                <span class="hud-value" id="lives-value">
+                    <span class="life-orb active"></span>
+                    <span class="life-orb active"></span>
+                    <span class="life-orb active"></span>
+                    <span class="life-orb active"></span>
+                    <span class="life-orb active"></span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Power Bar -->
+    <div id="power-bar-container">
+        <div id="power-bar">
+            <div id="power-fill"></div>
+        </div>
+        <span id="power-label">POWER</span>
+    </div>
+
+    <!-- Object Selector -->
+    <div id="object-selector">
+        <button class="obj-btn active" data-type="ball" title="Ball">
+            <div class="obj-icon ball-icon"></div>
+            <span>BALL</span>
+            <kbd>1</kbd>
+        </button>
+        <button class="obj-btn" data-type="ring" title="Ring">
+            <div class="obj-icon ring-icon"></div>
+            <span>RING</span>
+            <kbd>2</kbd>
+        </button>
+        <button class="obj-btn" data-type="diver" title="Diver">
+            <div class="obj-icon diver-icon"></div>
+            <span>DIVER</span>
+            <kbd>3</kbd>
+        </button>
+    </div>
+
+    <!-- Hit Feedback -->
+    <div id="hit-feedback" class="hidden">
+        <span id="hit-text">+100</span>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over" class="hidden">
+        <div class="gameover-content">
+            <h1 class="gameover-title">SIMULATION<br>COMPLETE</h1>
+            <div class="final-stats">
+                <div class="stat-row">
+                    <span class="stat-label">FINAL SCORE</span>
+                    <span class="stat-value" id="final-score">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">MAX COMBO</span>
+                    <span class="stat-value" id="final-combo">x1</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">TARGETS HIT</span>
+                    <span class="stat-value" id="final-hits">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">ACCURACY</span>
+                    <span class="stat-value" id="final-accuracy">0%</span>
+                </div>
+            </div>
+            <button id="restart-btn">
+                <span class="btn-text">RE-INITIALIZE</span>
+                <span class="btn-glow"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div id="notification" class="hidden"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="game.js"></script>
+</body>
+</html>
