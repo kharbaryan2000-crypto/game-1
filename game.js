@@ -422,13 +422,18 @@ function bindEvents() {
         if (S.on && e.button === 0) doThrow();
     });
 
-    $.startBtn.addEventListener('click', () => {
+    const startGame = () => {
+        if ($.start.classList.contains('hidden')) return;
         $.start.classList.add('hidden');
         S.on = true;
         try { initAudio(); } catch (err) {
             console.warn('Audio init failed:', err);
         }
-    });
+    };
+
+    $.startBtn.addEventListener('click', startGame);
+    $.startBtn.addEventListener('pointerdown', startGame);
+    $.startBtn.addEventListener('touchstart', startGame, { passive: true });
     $.restartBtn.addEventListener('click', () => { $.over.classList.add('hidden'); resetGame(); S.on = true; });
 
     window.addEventListener('resize', () => {

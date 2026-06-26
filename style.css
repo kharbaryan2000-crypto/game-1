@@ -67,7 +67,7 @@ html, body {
    START SCREEN
    ══════════════════════════════════════════ */
 #start-screen {
-    position: fixed; inset: 0; z-index: 1000;
+    position: fixed; inset: 0; z-index: 10002;
     display: flex; align-items: center; justify-content: center;
     background: radial-gradient(ellipse at 50% 60%, rgba(31,108,255,0.12) 0%, #ffffff 65%);
 }
@@ -182,6 +182,7 @@ button, button * { pointer-events: auto; }
     overflow: hidden;
     transition: all 0.3s;
     pointer-events: auto;
+    touch-action: manipulation;
 }
 #start-btn:hover, #restart-btn:hover {
     background: rgba(31,108,255,0.16);
