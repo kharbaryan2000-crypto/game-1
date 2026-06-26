@@ -11,11 +11,11 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { Water } from 'three/examples/jsm/objects/Water.js';
 
 const C = {
-    cyan:     0x00ffff,
-    magenta:  0xff00ff,
-    blue:     0x2266ff,
-    gold:     0xffcc00,
-    green:    0x00ff88,
+    cyan:     0x80b8ff,
+    magenta:  0xff95b8,
+    blue:     0xa8c8ff,
+    gold:     0xffd29a,
+    green:    0xa8ffd4,
 };
 
 const POOL = { w: 16, d: 12, depth: 2.2 };
@@ -92,6 +92,7 @@ function initScene() {
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(innerWidth, innerHeight);
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setClearColor(0xffffff, 1);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
     document.getElementById('game-container').appendChild(renderer.domElement);
@@ -108,14 +109,14 @@ function initScene() {
     clock = new THREE.Clock();
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.1));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+    const dir = new THREE.DirectionalLight(0xf8f9ff, 1.2);
     dir.position.set(4, 15, 6);
     scene.add(dir);
 
-    const uw1 = new THREE.PointLight(C.cyan, 1.5, 20);
+    const uw1 = new THREE.PointLight(0xdceaff, 1.1, 24);
     uw1.position.set(-4, -1, -2);
     scene.add(uw1);
-    const uw2 = new THREE.PointLight(C.magenta, 1.5, 20);
+    const uw2 = new THREE.PointLight(0xf8e5f0, 1.0, 24);
     uw2.position.set(4, -1, 2);
     scene.add(uw2);
 }
@@ -134,21 +135,21 @@ function buildPool() {
     floor.position.y = -dep;
     poolGrp.add(floor);
 
-    const gridW = new THREE.GridHelper(Math.max(POOL.w, POOL.d), 20, C.cyan, 0x004488);
+    const gridW = new THREE.GridHelper(Math.max(POOL.w, POOL.d), 20, 0xa8d8ff, 0xdbe8ff);
     gridW.position.y = -dep + 0.02;
     gridW.material.transparent = true;
-    gridW.material.opacity = 0.4;
+    gridW.material.opacity = 0.35;
     poolGrp.add(gridW);
 
     const basinGeo = new THREE.BoxGeometry(POOL.w, dep, POOL.d);
     const basinEdges = new THREE.LineSegments(
         new THREE.EdgesGeometry(basinGeo),
-        new THREE.LineBasicMaterial({ color: C.cyan, transparent: true, opacity: 0.7 })
+        new THREE.LineBasicMaterial({ color: 0xb0d8ff, transparent: true, opacity: 0.65 })
     );
     basinEdges.position.y = -dep / 2;
     poolGrp.add(basinEdges);
 
-    const rimMat = new THREE.MeshPhysicalMaterial({ color: 0x002244, roughness: 0.1, metalness: 0.9 });
+    const rimMat = new THREE.MeshPhysicalMaterial({ color: 0xf6f9ff, roughness: 0.08, metalness: 0.35 });
     const rimH = 0.2, rimW = 0.4;
     
     [[-1,0,POOL.w+rimW*2,rimH,rimW], [1,0,POOL.w+rimW*2,rimH,rimW], [0,-1,rimW,rimH,POOL.d], [0,1,rimW,rimH,POOL.d]]
@@ -156,7 +157,7 @@ function buildPool() {
         const r = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), rimMat);
         r.position.set(mx * (hw + rimW/2), rimH/2, mz * (hd + rimW/2));
         poolGrp.add(r);
-        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(r.geometry), new THREE.LineBasicMaterial({ color: C.cyan, opacity: 0.5, transparent: true }));
+        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(r.geometry), new THREE.LineBasicMaterial({ color: 0xa8c8ff, opacity: 0.45, transparent: true }));
         edges.position.copy(r.position);
         poolGrp.add(edges);
     });
@@ -183,8 +184,8 @@ function buildWater() {
             waterNormals: waterNormals,
             sunDirection: new THREE.Vector3(),
             sunColor: 0xffffff,
-            waterColor: 0x003366,
-            distortionScale: 2.0,
+            waterColor: 0xd9eafe,
+            distortionScale: 1.6,
             fog: false
         }
     );
@@ -197,7 +198,7 @@ function buildWater() {
 
 function buildAimMarker() {
     const geo = new THREE.RingGeometry(0.3, 0.4, 32);
-    const mat = new THREE.MeshBasicMaterial({ color: C.magenta, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffcad7, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
     aimMarker = new THREE.Mesh(geo, mat);
     aimMarker.rotation.x = -Math.PI / 2;
     aimMarker.position.y = 0.05;
@@ -208,8 +209,8 @@ function buildAimMarker() {
 function buildAvatar() {
     avatarGrp = new THREE.Group();
     const gm = new THREE.MeshPhysicalMaterial({
-        color: C.cyan, emissive: C.cyan, emissiveIntensity: 0.4,
-        transparent: true, opacity: 0.8, roughness: 0.1, metalness: 0.6
+        color: 0xe6f3ff, emissive: 0xd5ebff, emissiveIntensity: 0.45,
+        transparent: true, opacity: 0.85, roughness: 0.15, metalness: 0.4
     });
 
     const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.7, 8), gm);
@@ -234,7 +235,7 @@ function buildAmbientDust() {
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const mat = new THREE.PointsMaterial({ color: C.cyan, size: 0.04, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
+    const mat = new THREE.PointsMaterial({ color: 0xb8d8ff, size: 0.04, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
     scene.add(new THREE.Points(geo, mat));
 }
 
@@ -273,8 +274,8 @@ function doThrow() {
     const vel = new THREE.Vector3(vx, vy, vz);
 
     const mat = new THREE.MeshPhysicalMaterial({
-        color: C.magenta, emissive: C.magenta, emissiveIntensity: 0.6,
-        transparent: true, opacity: 0.9, roughness: 0.1, metalness: 0.6
+        color: 0xffcad7, emissive: 0xffc9d7, emissiveIntensity: 0.38,
+        transparent: true, opacity: 0.9, roughness: 0.16, metalness: 0.45
     });
     const mesh = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 8, 24), mat);
     mesh.rotation.x = Math.PI / 2;
@@ -421,7 +422,13 @@ function bindEvents() {
         if (S.on && e.button === 0) doThrow();
     });
 
-    $.startBtn.addEventListener('click', () => { initAudio(); $.start.classList.add('hidden'); S.on = true; });
+    $.startBtn.addEventListener('click', () => {
+        $.start.classList.add('hidden');
+        S.on = true;
+        try { initAudio(); } catch (err) {
+            console.warn('Audio init failed:', err);
+        }
+    });
     $.restartBtn.addEventListener('click', () => { $.over.classList.add('hidden'); resetGame(); S.on = true; });
 
     window.addEventListener('resize', () => {
@@ -446,8 +453,8 @@ function renderLives() {
 }
 
 function hitPopup(pts, combo) {
-    $.hitPop.innerHTML = `<span style="color:#00ff88; text-shadow:0 0 20px #00ff88">+${pts}</span>`;
-    if (combo > 1) $.hitPop.innerHTML += `<br><span style="color:#ff00ff;">×${combo} COMBO!</span>`;
+    $.hitPop.innerHTML = `<span style="color:#7fc6ff; text-shadow:0 0 20px #7fc6ff">+${pts}</span>`;
+    if (combo > 1) $.hitPop.innerHTML += `<br><span style="color:#ff9ecf;">×${combo} COMBO!</span>`;
     $.hitPop.classList.remove('hidden');
     $.hitPop.style.animation = 'none'; $.hitPop.offsetHeight; $.hitPop.style.animation = '';
     setTimeout(() => $.hitPop.classList.add('hidden'), 900);
@@ -492,7 +499,7 @@ function splashParticles(pos) {
         vels.push(new THREE.Vector3((Math.random()-.5)*3, 2+Math.random()*3, (Math.random()-.5)*3));
     }
     geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: C.cyan, size: 0.08, transparent: true }));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xb8d8ff, size: 0.08, transparent: true }));
     scene.add(pts);
     S.particles.push({ pts, vels, age: 0, life: 0.6 });
 }
