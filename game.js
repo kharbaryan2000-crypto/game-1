@@ -3,12 +3,12 @@
 // ═══════════════════════════════════════════════════
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { Water } from 'three/addons/objects/Water.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { Water } from 'three/examples/jsm/objects/Water.js';
 
 const C = {
     cyan:     0x00ffff,
@@ -432,7 +432,7 @@ function bindEvents() {
 
 function refreshHUD() {
     $.scoreV.textContent = S.score;
-    $.comboV.textContent = \`×\${S.combo}\`;
+    $.comboV.textContent = `×${S.combo}`;
     $.timerV.textContent = Math.ceil(S.timer);
 }
 
@@ -446,8 +446,8 @@ function renderLives() {
 }
 
 function hitPopup(pts, combo) {
-    $.hitPop.innerHTML = \`<span style="color:#00ff88; text-shadow:0 0 20px #00ff88">+\${pts}</span>\`;
-    if (combo > 1) $.hitPop.innerHTML += \`<br><span style="color:#ff00ff;">×\${combo} COMBO!</span>\`;
+    $.hitPop.innerHTML = `<span style="color:#00ff88; text-shadow:0 0 20px #00ff88">+${pts}</span>`;
+    if (combo > 1) $.hitPop.innerHTML += `<br><span style="color:#ff00ff;">×${combo} COMBO!</span>`;
     $.hitPop.classList.remove('hidden');
     $.hitPop.style.animation = 'none'; $.hitPop.offsetHeight; $.hitPop.style.animation = '';
     setTimeout(() => $.hitPop.classList.add('hidden'), 900);

@@ -1,0 +1,26 @@
+{
+  "name": "game-1",
+  "version": "1.0.0",
+  "description": "",
+  "main": "game.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kharbaryan2000-crypto/game-1.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/kharbaryan2000-crypto/game-1/issues"
+  },
+  "homepage": "https://github.com/kharbaryan2000-crypto/game-1#readme",
+  "dependencies": {
+    "three": "^0.185.0",
+    "vite": "^8.1.0",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}
