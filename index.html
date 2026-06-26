@@ -4,16 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HoloBox — Aqua Arena</title>
-    <meta name="description" content="Holographic 3D Pool Experience — Immersive Aqua Arena for HoloBox Technology">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Scanline holographic overlay -->
     <div class="scanlines"></div>
     <div class="vignette"></div>
 
-    <!-- Start Screen -->
     <div id="start-screen">
         <div class="start-content">
             <div class="holo-logo-wrap">
@@ -23,41 +20,21 @@
                     <span class="logo-line bottom">ARENA</span>
                 </div>
             </div>
-            <p class="tagline">HOLOGRAPHIC POOL EXPERIENCE</p>
             <div class="start-divider"></div>
             <div class="start-instructions">
-                <div class="inst-row"><kbd>AIM</kbd> <span>Move mouse to aim</span></div>
-                <div class="inst-row"><kbd>HOLD</kbd> <span>Hold click to charge power</span></div>
-                <div class="inst-row"><kbd>RELEASE</kbd> <span>Release to throw rings</span></div>
+                <div class="inst-row"><kbd>AIM</kbd> <span>Move mouse over the pool</span></div>
+                <div class="inst-row"><kbd>CLICK</kbd> <span>Click to toss ring exactly at target</span></div>
             </div>
             <button id="start-btn">
                 <span class="btn-text">ENTER ARENA</span>
                 <span class="btn-glow"></span>
             </button>
-            <p class="powered-by">Powered by <strong>HoloBox</strong> Technology</p>
         </div>
-        <div class="start-particles" id="start-particles"></div>
     </div>
 
-    <!-- 3D Canvas -->
     <div id="game-container"></div>
 
-    <!-- Crosshair -->
-    <div id="crosshair">
-        <svg viewBox="0 0 60 60" width="60" height="60">
-            <circle cx="30" cy="30" r="18" fill="none" stroke="rgba(0,255,255,0.4)" stroke-width="1" class="ch-outer"/>
-            <circle cx="30" cy="30" r="3" fill="rgba(0,255,255,0.9)" class="ch-dot"/>
-            <line x1="30" y1="5" x2="30" y2="15" stroke="rgba(0,255,255,0.5)" stroke-width="1"/>
-            <line x1="30" y1="45" x2="30" y2="55" stroke="rgba(0,255,255,0.5)" stroke-width="1"/>
-            <line x1="5" y1="30" x2="15" y2="30" stroke="rgba(0,255,255,0.5)" stroke-width="1"/>
-            <line x1="45" y1="30" x2="55" y2="30" stroke="rgba(0,255,255,0.5)" stroke-width="1"/>
-            <!-- diagonal ticks -->
-            <line x1="12" y1="12" x2="17" y2="17" stroke="rgba(0,255,255,0.25)" stroke-width="0.7"/>
-            <line x1="43" y1="12" x2="48" y2="17" stroke="rgba(0,255,255,0.25)" stroke-width="0.7" transform="rotate(90 45.5 14.5)"/>
-        </svg>
-    </div>
-
-    <!-- HUD Top Bar -->
+    <!-- Target Marker is drawn in 3D now, but keep minimal HUD -->
     <div id="hud">
         <div class="hud-panel hud-left">
             <div class="hud-item">
@@ -80,55 +57,21 @@
                 <span class="hud-label">LIVES</span>
                 <div class="hud-value" id="lives-value"></div>
             </div>
-            <div class="hud-item">
-                <span class="hud-label">WAVE</span>
-                <span class="hud-value wave" id="wave-value">1</span>
-            </div>
         </div>
     </div>
 
-    <!-- Power Meter -->
-    <div id="power-meter">
-        <div id="power-track">
-            <div id="power-fill"></div>
-        </div>
-        <span id="power-pct">0%</span>
-    </div>
-
-    <!-- Center Notifications -->
     <div id="notification" class="hidden"></div>
     <div id="hit-popup" class="hidden"></div>
 
-    <!-- Game Over -->
     <div id="game-over" class="hidden">
         <div class="go-content">
-            <div class="go-title-wrap">
-                <div class="go-line"></div>
-                <h1 class="go-title">SESSION COMPLETE</h1>
-                <div class="go-line"></div>
-            </div>
+            <h1 class="go-title">SESSION COMPLETE</h1>
             <div class="go-stats">
-                <div class="go-stat">
-                    <span class="go-stat-val" id="final-score">0</span>
-                    <span class="go-stat-lbl">SCORE</span>
-                </div>
-                <div class="go-stat">
-                    <span class="go-stat-val" id="final-hits">0</span>
-                    <span class="go-stat-lbl">HITS</span>
-                </div>
-                <div class="go-stat">
-                    <span class="go-stat-val" id="final-accuracy">0%</span>
-                    <span class="go-stat-lbl">ACCURACY</span>
-                </div>
-                <div class="go-stat">
-                    <span class="go-stat-val" id="final-combo">×1</span>
-                    <span class="go-stat-lbl">MAX COMBO</span>
-                </div>
+                <div class="go-stat"><span class="go-stat-val" id="final-score">0</span><span class="go-stat-lbl">SCORE</span></div>
+                <div class="go-stat"><span class="go-stat-val" id="final-hits">0</span><span class="go-stat-lbl">HITS</span></div>
+                <div class="go-stat"><span class="go-stat-val" id="final-accuracy">0%</span><span class="go-stat-lbl">ACCURACY</span></div>
             </div>
-            <button id="restart-btn">
-                <span class="btn-text">PLAY AGAIN</span>
-                <span class="btn-glow"></span>
-            </button>
+            <button id="restart-btn"><span class="btn-text">PLAY AGAIN</span></button>
         </div>
     </div>
 
