@@ -423,6 +423,7 @@ function bindEvents() {
     });
 
     const startGame = () => {
+        console.log('startGame() called — start element hidden?', $.start.classList.contains('hidden'));
         if ($.start.classList.contains('hidden')) return;
         $.start.classList.add('hidden');
         S.on = true;
